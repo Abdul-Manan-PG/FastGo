@@ -3,15 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastGo Traffic Control</title>
+    <title>FastGo Logistics</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* New Styles for Tabs */
+        .tab-btn { padding: 5px 10px; cursor: pointer; background:#ddd; border:none;}
+        .tab-btn.active { background: #3498db; color:white; }
+        .tab-content { display: none; padding: 10px; background: #fff; border: 1px solid #ddd;}
+        .tab-content.active { display: block; }
+        .pkg-item { border-bottom: 1px solid #eee; padding: 5px; font-size: 12px; }
+        .status-badge { padding: 2px 6px; border-radius: 4px; color: white; font-size: 10px;}
+        .st-0 { background: #95a5a6; } /* Created */
+        .st-1 { background: #f39c12; } /* Loaded */
+        .st-2 { background: #3498db; } /* In Transit */
+        .st-3 { background: #2ecc71; } /* Arrived */
+        .st-4 { background: #27ae60; } /* Delivered */
+        .st-5 { background: #c0392b; } /* Failed */
+    </style>
 </head>
 <body>
-
     <div id="login-screen" class="screen active">
         <div class="login-box">
-            <h1>FastGo Admin</h1>
-            <input type="text" id="username" placeholder="Username">
+            <h1>FastGo Login</h1>
+            <input type="text" id="username" placeholder="Username (City Name)">
             <input type="password" id="password" placeholder="Password">
             <button onclick="login()">Login</button>
             <p id="login-msg" class="error"></p>
@@ -20,52 +34,73 @@
 
     <div id="dashboard-screen" class="screen">
         <nav>
-            <h2>FastGo <span id="role-display"></span></h2>
+            <h2>FastGo <span id="role-display"></span> <span id="city-display"></span></h2>
+            <div id="admin-controls" style="display:none;">
+                <button onclick="nextShift()" style="background:#f1c40f; color:#333;">⏩ NEXT SHIFT</button>
+            </div>
             <button onclick="logout()" class="logout-btn">Logout</button>
         </nav>
 
         <div class="container">
-            <div class="sidebar" id="admin-sidebar">
-                
-                <div class="card">
-                    <h4>📍 City Management</h4>
-                    <input type="text" id="new-city-name" placeholder="City Name">
-                    <input type="text" id="new-city-pass" placeholder="Password">
-                    <button onclick="addCity()" class="blue-btn">Add City</button>
+            <div class="sidebar" id="sidebar-container">
+                <div id="admin-tools">
+                    <div class="card">
+                        <h4>📍 City Management</h4>
+                        <input type="text" id="new-city-name" placeholder="City Name">
+                        <input type="text" id="new-city-pass" placeholder="Password">
+                        <button onclick="addCity()" class="blue-btn">Add City</button>
+                    </div>
+                    <div class="card">
+                        <h4>🛣️ Add Route</h4>
+                        <input type="text" id="route-key" placeholder="Key (e.g. A-B)">
+                        <input type="number" id="route-dist" placeholder="Distance">
+                        <button onclick="addRoute()" class="blue-btn">Connect Route</button>
+                    </div>
+                    <div class="card">
+                        <h4>🚦 Route Manager</h4>
+                        <div id="route-list" class="route-list-container"></div>
+                    </div>
+                    <div class="card"><button onclick="resetLayout()" class="logout-btn">↺ Reset Layout</button></div>
                 </div>
 
-                <div class="card">
-                    <h4>🛣️ Add Route</h4>
-                    <input type="text" id="route-key" placeholder="Key (e.g. A-B)">
-                    <input type="number" id="route-dist" placeholder="Distance (km)">
-                    <button onclick="addRoute()" class="blue-btn">Connect Route</button>
-                </div>
+                <div id="manager-tools" style="display:none;">
+                    <div class="card">
+                        <h4>📦 New Package</h4>
+                        <input type="text" id="pkg-sender" placeholder="Sender Name">
+                        <input type="text" id="pkg-receiver" placeholder="Receiver Name">
+                        <input type="text" id="pkg-addr" placeholder="Address">
+                        <input type="text" id="pkg-dest" placeholder="Dest City">
+                        <select id="pkg-type">
+                            <option value="1">Overnight (Fastest)</option>
+                            <option value="2">2-Day (Medium)</option>
+                            <option value="3">Normal (Slow)</option>
+                        </select>
+                        <input type="number" id="pkg-weight" placeholder="Weight (kg)">
+                        <button onclick="createPackage()" class="blue-btn">Create Package</button>
+                    </div>
 
-                <div class="card">
-                    <h4>🚦 Route Manager</h4>
-                    <p class="hint">Sorted by Distance</p>
-                    <div id="route-list" class="route-list-container"></div>
+                    <div class="card">
+                        <div style="display:flex; gap:5px; margin-bottom:5px;">
+                            <button class="tab-btn active" onclick="showTab('outgoing')">Out</button>
+                            <button class="tab-btn" onclick="showTab('incoming')">In</button>
+                            <button class="tab-btn" onclick="showTab('history')">Hist</button>
+                        </div>
+                        
+                        <div id="tab-outgoing" class="tab-content active"></div>
+                        <div id="tab-incoming" class="tab-content"></div>
+                        <div id="tab-history" class="tab-content"></div>
+                    </div>
                 </div>
             </div>
 
             <div class="map-container">
                 <canvas id="mapCanvas"></canvas>
-    
-                <div id="loading-overlay">
-                    <div class="spinner"></div>
-                    <p>Loading Map...</p>
-                </div>
-    
                 <div class="map-controls">
-                    <input type="text" id="start-city" placeholder="Start City">
-                    <input type="text" id="end-city" placeholder="End City">
-                    <button onclick="findPath()" class="action-btn">Find Path 🔍</button>
-                    <span id="path-result"></span>
+                    <span id="map-msg"></span>
                 </div>
             </div>
         </div>
     </div>
-
     <script src="script.js"></script>
 </body>
 </html>

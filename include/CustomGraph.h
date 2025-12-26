@@ -189,7 +189,7 @@ public:
         reverse(path.begin(), path.end());
         return {dist[end], path};
     }
-    
+
     void updateNodePos(string name, float x, float y) {
         if (nameToId.count(name)) {
             int id = nameToId[name];
@@ -201,6 +201,20 @@ public:
                 }
             }
         }
+    }
+
+    // Returns the name of the immediate next city to visit. Returns "" if no path or arrived.
+    string getNextHop(string currentCity, string destCity) {
+        if (currentCity == destCity) return currentCity;
+        
+        // Use existing Dijkstra logic
+        pair<int, vector<string>> result = getShortestPath(currentCity, destCity);
+        
+        // result.second contains {Start, Next, ..., End}
+        if (result.first != -1 && result.second.size() >= 2) {
+            return result.second[1]; // The city immediately after start
+        }
+        return ""; // No path found (road blocked or disconnected)
     }
 
     const vector<Node>& getNodes() const { return nodes; }
