@@ -35,26 +35,27 @@
                 </div>
 
                 <div class="card">
-                    <h4>🛣️ Route Connection</h4>
+                    <h4>🛣️ Add Route</h4>
                     <input type="text" id="route-key" placeholder="Key (e.g. A-B)">
                     <input type="number" id="route-dist" placeholder="Distance (km)">
                     <button onclick="addRoute()" class="blue-btn">Connect Route</button>
                 </div>
 
-                <div class="card traffic-card">
-                    <h4>🚦 Traffic Control</h4>
-                    <p class="hint">Enter Route Key (e.g. A-B)</p>
-                    <input type="text" id="block-key" placeholder="Route Key">
-                    <div class="btn-group">
-                        <button onclick="toggleBlock(true)" class="red-btn">Block ⛔</button>
-                        <button onclick="toggleBlock(false)" class="green-btn">Open ✅</button>
-                    </div>
+                <div class="card">
+                    <h4>🚦 Route Manager</h4>
+                    <p class="hint">Sorted by Distance</p>
+                    <div id="route-list" class="route-list-container"></div>
                 </div>
             </div>
 
             <div class="map-container">
                 <canvas id="mapCanvas"></canvas>
-                
+    
+                <div id="loading-overlay">
+                    <div class="spinner"></div>
+                    <p>Loading Map...</p>
+                </div>
+    
                 <div class="map-controls">
                     <input type="text" id="start-city" placeholder="Start City">
                     <input type="text" id="end-city" placeholder="End City">
