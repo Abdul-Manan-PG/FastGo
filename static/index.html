@@ -6,19 +6,8 @@
     <title>FastGo Logistics</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        /* New Styles for Tabs */
-        .tab-btn { padding: 5px 10px; cursor: pointer; background:#ddd; border:none;}
-        .tab-btn.active { background: #3498db; color:white; }
-        .tab-content { display: none; padding: 10px; background: #fff; border: 1px solid #ddd;}
-        .tab-content.active { display: block; }
-        .pkg-item { border-bottom: 1px solid #eee; padding: 5px; font-size: 12px; }
-        .status-badge { padding: 2px 6px; border-radius: 4px; color: white; font-size: 10px;}
-        .st-0 { background: #95a5a6; } /* Created */
-        .st-1 { background: #f39c12; } /* Loaded */
-        .st-2 { background: #3498db; } /* In Transit */
-        .st-3 { background: #2ecc71; } /* Arrived */
-        .st-4 { background: #27ae60; } /* Delivered */
-        .st-5 { background: #c0392b; } /* Failed */
+        /* Small styling for close button */
+        #close-tracking-btn { background: #e74c3c; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -28,6 +17,10 @@
             <input type="text" id="username" placeholder="Username (City Name)">
             <input type="password" id="password" placeholder="Password">
             <button onclick="login()">Login</button>
+            <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                <p style="font-size: 12px; color: #777; margin-bottom: 5px;">Tracking a package?</p>
+                <button onclick="loginAsGuest()" style="background:#27ae60;">👤 Login as Guest</button>
+            </div>
             <p id="login-msg" class="error"></p>
         </div>
     </div>
@@ -43,7 +36,35 @@
 
         <div class="container">
             <div class="sidebar" id="sidebar-container">
-                <div id="admin-tools">
+                
+                <div id="pkg-tracking-pane" class="card" style="display:none; border:2px solid #3498db;">
+                    <h4>📦 Tracking Info</h4>
+                    <p><b>ID:</b> #<span id="trk-id"></span></p>
+                    <p><b>Status:</b> <span id="trk-status" class="status-badge"></span></p>
+                    <p><b>Current:</b> <span id="trk-current" style="color:#e67e22; font-weight:bold;"></span></p>
+                    
+                    <h4>History (Green)</h4>
+                    <div id="trk-history-list" style="font-size:11px; max-height:100px; overflow-y:auto; margin-bottom:10px;"></div>
+                    
+                    <h4>Future Route (Blue)</h4>
+                    <div id="trk-future-list" style="font-size:11px; color:#555;"></div>
+
+                    <button id="close-tracking-btn" onclick="closeTracking()">❌ Close Tracking</button>
+                </div>
+
+                <div id="guest-tools" style="display:none;">
+                    <div class="card">
+                        <h4>📦 Track Package</h4>
+                        <input type="number" id="guest-track-id" placeholder="Enter Tracking ID">
+                        <button onclick="trackPackageByID()" class="blue-btn">Search</button>
+                    </div>
+                </div>
+
+                <div id="admin-tools" style="display:none;">
+                    <div class="card">
+                        <button class="tab-btn active" onclick="loadAdminPackages()">All Packages</button>
+                        <div id="admin-pkg-list" class="tab-content active" style="max-height:200px;"></div>
+                    </div>
                     <div class="card">
                         <h4>📍 City Management</h4>
                         <input type="text" id="new-city-name" placeholder="City Name">
@@ -60,32 +81,29 @@
                         <h4>🚦 Route Manager</h4>
                         <div id="route-list" class="route-list-container"></div>
                     </div>
-                    <div class="card"><button onclick="resetLayout()" class="logout-btn">↺ Reset Layout</button></div>
                 </div>
 
                 <div id="manager-tools" style="display:none;">
                     <div class="card">
                         <h4>📦 New Package</h4>
-                        <input type="text" id="pkg-sender" placeholder="Sender Name">
-                        <input type="text" id="pkg-receiver" placeholder="Receiver Name">
+                        <input type="text" id="pkg-sender" placeholder="Sender">
+                        <input type="text" id="pkg-receiver" placeholder="Receiver">
                         <input type="text" id="pkg-addr" placeholder="Address">
                         <input type="text" id="pkg-dest" placeholder="Dest City">
                         <select id="pkg-type">
-                            <option value="1">Overnight (Fastest)</option>
-                            <option value="2">2-Day (Medium)</option>
-                            <option value="3">Normal (Slow)</option>
+                            <option value="1">Overnight</option>
+                            <option value="2">2-Day</option>
+                            <option value="3">Normal</option>
                         </select>
-                        <input type="number" id="pkg-weight" placeholder="Weight (kg)">
-                        <button onclick="createPackage()" class="blue-btn">Create Package</button>
+                        <input type="number" id="pkg-weight" placeholder="Weight">
+                        <button onclick="createPackage()" class="blue-btn">Create</button>
                     </div>
-
                     <div class="card">
                         <div style="display:flex; gap:5px; margin-bottom:5px;">
                             <button class="tab-btn active" onclick="showTab('outgoing')">Out</button>
                             <button class="tab-btn" onclick="showTab('incoming')">In</button>
                             <button class="tab-btn" onclick="showTab('history')">Hist</button>
                         </div>
-                        
                         <div id="tab-outgoing" class="tab-content active"></div>
                         <div id="tab-incoming" class="tab-content"></div>
                         <div id="tab-history" class="tab-content"></div>
@@ -95,9 +113,6 @@
 
             <div class="map-container">
                 <canvas id="mapCanvas"></canvas>
-                <div class="map-controls">
-                    <span id="map-msg"></span>
-                </div>
             </div>
         </div>
     </div>

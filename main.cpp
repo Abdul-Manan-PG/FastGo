@@ -1,20 +1,34 @@
 #define CROW_MAIN
-#include "include/crow_all.h"
+#include "include/crow_all.h" 
 #include "include/FastGo.h"
 #include "include/CustomGraph.h"
+#include <sstream>
+
+// Helper to split strings (e.g., "City|Time,City|Time" -> vector)
+vector<string> split(string s, char delimiter) {
+    vector<string> tokens;
+    string token;
+    istringstream tokenStream(s);
+    while (getline(tokenStream, token, delimiter)) {
+        tokens.push_back(token);
+    }
+    return tokens;
+}
 
 int main() {
     crow::SimpleApp app;
+
+    // --- System Core ---
     FastGo appCore; 
     Graph graph(appCore.getCities(), appCore.getRoutes());
 
     auto refresh = [&]() { 
-        graph.refreshGraph();
+        graph.refreshGraph(); 
         graph.syncToHash();       
         appCore.saveCitiesToDB(); 
     };
 
-    // --- Static Files ---
+    // --- STATIC FILE SERVING ---
     CROW_ROUTE(app, "/")([](const crow::request&, crow::response& res){
         res.set_static_file_info("static/index.html"); res.end();
     });
@@ -22,39 +36,78 @@ int main() {
         res.set_static_file_info("static/" + filename); res.end();
     });
 
-    // --- Core API ---
+    // --- AUTH ---
     CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Post)
     ([&](const crow::request& req){
         auto x = crow::json::load(req.body);
         if (!x) return crow::response(400);
         string resStr = appCore.login(x["username"].s(), x["password"].s());
+        
         crow::json::wvalue res;
         if (resStr.find("Success") != string::npos) {
             res["status"] = "success";
             res["role"] = (appCore.getRole() == Admin) ? "admin" : "manager";
-            res["city"] = appCore.getLoggedCity(); // Send city name back to JS
+            res["city"] = appCore.getLoggedCity();
         } else { res["status"] = "error"; res["message"] = resStr; }
         return crow::response(res);
     });
 
-    // --- Package APIs ---
+    // --- PACKAGE MANAGEMENT ---
 
+    // 1. Create Package (Calculates Initial Route immediately)
     CROW_ROUTE(app, "/api/add_package").methods(crow::HTTPMethod::Post)
     ([&](const crow::request& req){
         auto x = crow::json::load(req.body);
         if(!x) return crow::response(400);
+        // We pass 'graph' so it can calculate the initial future path (Blue line)
         appCore.createPackage(
             x["sender"].s(), x["receiver"].s(), x["address"].s(),
-            x["dest"].s(), x["type"].i(), x["weight"].d()
+            x["dest"].s(), x["type"].i(), x["weight"].d(), graph
         );
         return crow::response(200);
     });
 
+    // 2. Track Package (Parses History & Route Strings)
+    CROW_ROUTE(app, "/api/track_package")
+    ([&](const crow::request& req){
+        string idStr = req.url_params.get("id");
+        if(idStr.empty()) return crow::response(400);
+        
+        Package p = appCore.getPackageDetails(stoi(idStr));
+        crow::json::wvalue res;
+
+        if(p.id != -1) {
+            res["found"] = true;
+            res["id"] = p.id;
+            res["sender"] = p.sender; res["receiver"] = p.receiver;
+            res["source"] = p.sourceCity; res["dest"] = p.destCity;
+            res["current"] = p.currentCity;
+            res["status"] = p.status; res["type"] = p.type;
+
+            // Parse History: "CityA|Time,CityB|Time"
+            vector<string> histEntries = split(p.historyStr, ',');
+            for(size_t i=0; i<histEntries.size(); i++) {
+                vector<string> parts = split(histEntries[i], '|');
+                res["history"][i]["city"] = parts[0];
+                res["history"][i]["time"] = (parts.size() > 1) ? parts[1] : "";
+            }
+
+            // Parse Future Route: "CityC,CityD"
+            vector<string> planEntries = split(p.routeStr, ',');
+            for(size_t i=0; i<planEntries.size(); i++) {
+                res["future"][i] = planEntries[i];
+            }
+        } else {
+            res["found"] = false;
+        }
+        return crow::response(res);
+    });
+
+    // 3. Manager Packages
     CROW_ROUTE(app, "/api/manager_packages")
     ([&](const crow::request& req){
         string city = req.url_params.get("city");
         vector<Package> pkgs = appCore.getPackagesForManager(city);
-        
         crow::json::wvalue res;
         for (size_t i = 0; i < pkgs.size(); i++) {
             res[i]["id"] = pkgs[i].id;
@@ -62,30 +115,44 @@ int main() {
             res[i]["dest"] = pkgs[i].destCity;
             res[i]["current"] = pkgs[i].currentCity;
             res[i]["status"] = pkgs[i].status;
-            res[i]["type"] = pkgs[i].type;
         }
         return crow::response(res);
     });
 
+    // 4. Admin Packages (All)
+    CROW_ROUTE(app, "/api/admin_packages")
+    ([&](){
+        if(appCore.getRole() != Admin) return crow::response(403);
+        vector<Package> all = appCore.getAllPackages();
+        crow::json::wvalue res;
+        for(size_t i=0; i<all.size(); i++) {
+            res[i]["id"] = all[i].id;
+            res[i]["current"] = all[i].currentCity;
+            res[i]["dest"] = all[i].destCity;
+            res[i]["status"] = all[i].status;
+        }
+        return crow::response(res);
+    });
+
+    // 5. Update Status (Load/Deliver)
     CROW_ROUTE(app, "/api/update_pkg_status").methods(crow::HTTPMethod::Post)
     ([&](const crow::request& req){
         auto x = crow::json::load(req.body);
-        int id = x["id"].i();
-        string action = x["action"].s(); // "load", "deliver", "return"
+        int status = 0;
+        string action = x["action"].s();
+        if (action == "load") status = 1;      // LOADED
+        else if (action == "deliver") status = 4; // DELIVERED
+        else if (action == "return") status = 5;  // FAILED/RETURN
         
-        if (action == "load") appCore.loadPackage(id);
-        else if (action == "deliver") appCore.deliverPackage(id);
-        else if (action == "return") appCore.returnPackage(id);
-        
+        appCore.updatePkgStatusSimple(x["id"].i(), status);
         return crow::response(200);
     });
 
-    // --- Simulation API (Admin) ---
-
+    // --- SIMULATION ---
     CROW_ROUTE(app, "/api/next_shift").methods(crow::HTTPMethod::Post)
     ([&](){
         if(appCore.getRole() != Admin) return crow::response(403);
-        // Pass the graph reference so packages can calculate paths
+        // Run physics/logic step. Graph is passed to calculate new routes dynamically.
         vector<string> logs = appCore.runTimeStep(graph);
         
         crow::json::wvalue res;
@@ -93,58 +160,7 @@ int main() {
         return crow::response(res);
     });
 
-    CROW_ROUTE(app, "/api/city_packages")
-    ([&](const crow::request& req){
-        string city = req.url_params.get("city");
-        vector<Package> all = appCore.getAllPackages();
-        crow::json::wvalue res;
-        int count = 0;
-        for(const auto& p : all) {
-            if(p.currentCity == city) {
-                res[count]["id"] = p.id;
-                res[count]["dest"] = p.destCity;
-                res[count]["status"] = p.status;
-                res[count]["type"] = p.type;
-                count++;
-            }
-        }
-        return crow::response(res);
-    });
-
-    // --- Existing Map APIs --- (Keep unchanged)
-    CROW_ROUTE(app, "/api/add_city").methods(crow::HTTPMethod::Post)
-    ([&](const crow::request& req){
-        auto x = crow::json::load(req.body);
-        string msg = appCore.addCity(x["name"].s(), x["password"].s());
-        refresh();
-        crow::json::wvalue res; res["message"] = msg;
-        return crow::response(res);
-    });
-    CROW_ROUTE(app, "/api/add_route").methods(crow::HTTPMethod::Post)
-    ([&](const crow::request& req){
-        auto x = crow::json::load(req.body);
-        string msg = appCore.addRoute(x["key"].s(), x["distance"].i());
-        refresh();
-        crow::json::wvalue res; res["message"] = msg;
-        return crow::response(res);
-    });
-    CROW_ROUTE(app, "/api/toggle_block").methods(crow::HTTPMethod::Post)
-    ([&](const crow::request& req){
-        auto x = crow::json::load(req.body);
-        string key = x["key"].s();
-        bool shouldBlock = x["block"].b();
-        string msg = appCore.toggleRouteBlock(key, shouldBlock);
-        refresh(); 
-        crow::json::wvalue res; res["message"] = msg;
-        return crow::response(res);
-    });
-    CROW_ROUTE(app, "/api/update_node").methods(crow::HTTPMethod::Post)
-    ([&](const crow::request& req){
-        auto x = crow::json::load(req.body);
-        appCore.updateCityPosition(x["name"].s(), (float)x["x"].d(), (float)x["y"].d());
-        graph.updateNodePos(x["name"].s(), (float)x["x"].d(), (float)x["y"].d());
-        return crow::response(200);
-    });
+    // --- MAP & GRAPH UTILS ---
     CROW_ROUTE(app, "/api/map")
     ([&](){
         crow::json::wvalue res;
@@ -170,19 +186,44 @@ int main() {
         }
         return res;
     });
-    CROW_ROUTE(app, "/api/path")
+
+    CROW_ROUTE(app, "/api/add_city").methods(crow::HTTPMethod::Post)
     ([&](const crow::request& req){
-        string start = req.url_params.get("start");
-        string end = req.url_params.get("end");
-        auto result = graph.getShortestPath(start, end);
-        crow::json::wvalue res;
-        if (result.first != -1) {
-            res["found"] = true;
-            res["distance"] = result.first;
-            for(size_t i = 0; i < result.second.size(); i++) res["path"][i] = result.second[i];
-        } else { res["found"] = false; }
+        auto x = crow::json::load(req.body);
+        string msg = appCore.addCity(x["name"].s(), x["password"].s());
+        refresh();
+        crow::json::wvalue res; res["message"] = msg;
         return crow::response(res);
     });
-    
+
+    CROW_ROUTE(app, "/api/add_route").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        string msg = appCore.addRoute(x["key"].s(), x["distance"].i());
+        refresh();
+        crow::json::wvalue res; res["message"] = msg;
+        return crow::response(res);
+    });
+
+    CROW_ROUTE(app, "/api/toggle_block").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        string msg = appCore.toggleRouteBlock(x["key"].s(), x["block"].b());
+        refresh(); 
+        crow::json::wvalue res; res["message"] = msg;
+        return crow::response(res);
+    });
+
+    CROW_ROUTE(app, "/api/update_node").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        string name = x["name"].s();
+        float newX = (float)x["x"].d();
+        float newY = (float)x["y"].d();
+        appCore.updateCityPosition(name, newX, newY);
+        graph.updateNodePos(name, newX, newY);
+        return crow::response(200);
+    });
+
     app.port(8080).multithreaded().run();
 }
