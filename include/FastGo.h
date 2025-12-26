@@ -6,124 +6,66 @@
 
 using namespace std;
 
-// Enum for Roles
 enum Role { Admin = 0, Manager = 1, Guest = 2 };
 
 class FastGo {
 private:
     Role currentRole;
-    bool isLoggedIn;
-
-    // Data Structures (In-Memory)
     SimpleHash cityHashTable;
     hashroutes routeHashTable;
-
-    // Database Handlers (Persistence)
     CityDatabase cityDB;
     SaveRoute routeDB;
 
 public:
-    // Constructor: Initializes DBs and loads data into Hash Tables
-    FastGo() 
-        : currentRole(Guest), isLoggedIn(false), 
-          cityDB("cities.db"), routeDB("routes.db") 
-    {
-        cout << "Loading system data..." << endl;
+    FastGo() : currentRole(Guest), cityDB("cities.db"), routeDB("routes.db") {
         cityDB.loadToSimpleHash(cityHashTable);
         routeDB.loadToHashTable(routeHashTable);
-        cout << "System Ready." << endl;
     }
 
-    // Login Function
-    // Uses City Name as Username and stored Password
-    bool login(string username, string password) {
-        // 1. Hardcoded Master Admin Check
+    string login(string username, string password) {
         if (username == "admin" && password == "admin123") {
             currentRole = Admin;
-            isLoggedIn = true;
-            cout << "Login Successful: Welcome Administrator." << endl;
-            return true;
+            return "Success: Admin Login";
         }
-
-        // 2. Check CityHashTable for Manager Login
         string storedPass = cityHashTable.getPassword(username);
-        
-        // getPassword returns "-1" if user doesn't exist (as per CustomHash.h)
         if (storedPass != "-1" && storedPass == password) {
             currentRole = Manager;
-            isLoggedIn = true;
-            cout << "Login Successful: Welcome Manager of " << username << "." << endl;
-            return true;
+            return "Success: Manager Login";
         }
-
-        cout << "Login Failed: Invalid City Name or Password." << endl;
-        return false;
+        return "Error: Invalid Credentials";
     }
 
-    // Add City/Manager (Only Admin can do this)
-    void addCity(string cityName, string cityPassword) {
-        if (!isLoggedIn || currentRole != Admin) {
-            cout << "Access Denied: Only Admins can add Cities." << endl;
-            return;
-        }
-
-        // Auto-increment logic:
-        // If we have 3 cities (0, 1, 2), size is 3, so next ID is 3.
+    string addCity(string cityName, string cityPassword) {
+        if (currentRole != Admin) return "Error: Access Denied";
         int newPointId = cityHashTable.getAll().size();
+        if (cityHashTable.getPoint(cityName) != -1) return "Error: City Exists";
 
-        // Check if city already exists to prevent duplicate IDs or overwrites
-        // (Optional: SimpleHash updates existing keys, but for ID logic strictly new is better)
-        if (cityHashTable.getPoint(cityName) != -1) {
-            cout << "Error: City '" << cityName << "' already exists." << endl;
-            return;
-        }
-
-        // Insert into Hash Table
         if (cityHashTable.insert(cityName, newPointId, cityPassword)) {
-            cout << "Success: City '" << cityName << "' added with Point ID: " << newPointId << endl;
-            
-            // Save to Database immediately
             cityDB.saveFromSimpleHash(cityHashTable);
-        } else {
-            cout << "Error: Hash Table full or error inserting." << endl;
+            return "Success: City Added";
         }
+        return "Error: Hash Full";
     }
 
-    // Add Route (Only Admin can do this)
-    void addRoute(string routeKey, int distance) {
-        if (!isLoggedIn || currentRole != Admin) {
-            cout << "Access Denied: Only Admins can add Routes." << endl;
-            return;
-        }
-
-        // Insert into Hash Table
+    string addRoute(string routeKey, int distance) {
+        if (currentRole != Admin) return "Error: Access Denied";
         if (routeHashTable.insert(routeKey, distance, false)) {
-            cout << "Success: Route '" << routeKey << "' added." << endl;
-            
-            // Save to Database immediately
             routeDB.saveFromHashTable(routeHashTable);
-        } else {
-            cout << "Error: Could not add route." << endl;
+            return "Success: Route Added";
         }
+        return "Error: Failed to Add";
     }
 
-    // Helper: Block/Unblock Route (Optional, usually Admin or Logic controlled)
-    void toggleRouteBlock(string routeKey, bool block) {
-        if (!isLoggedIn || currentRole != Admin) {
-            cout << "Access Denied: Only Admins can block/unblock routes." << endl;
-            return;
+    string toggleRouteBlock(string routeKey, bool block) {
+        if (currentRole != Admin) return "Error: Access Denied";
+        if (block ? routeHashTable.blockRoute(routeKey) : routeHashTable.unblockRoute(routeKey)) {
+            routeDB.saveFromHashTable(routeHashTable);
+            return block ? "Success: Blocked" : "Success: Unblocked";
         }
-        
-        if (block) routeHashTable.blockRoute(routeKey);
-        else routeHashTable.unblockRoute(routeKey);
-        
-        routeDB.saveFromHashTable(routeHashTable); // Persist change
-        cout << "Route " << routeKey << (block ? " blocked." : " unblocked.") << endl;
+        return "Error: Route Not Found";
     }
 
     Role getRole() { return currentRole; }
-    
-    // Getters for main to use if needed
     SimpleHash& getCities() { return cityHashTable; }
     hashroutes& getRoutes() { return routeHashTable; }
 };

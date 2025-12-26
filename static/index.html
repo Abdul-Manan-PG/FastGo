@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastGo Traffic Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="login-screen" class="screen active">
+        <div class="login-box">
+            <h1>FastGo Admin</h1>
+            <input type="text" id="username" placeholder="Username">
+            <input type="password" id="password" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <p id="login-msg" class="error"></p>
+        </div>
+    </div>
+
+    <div id="dashboard-screen" class="screen">
+        <nav>
+            <h2>FastGo <span id="role-display"></span></h2>
+            <button onclick="logout()" class="logout-btn">Logout</button>
+        </nav>
+
+        <div class="container">
+            <div class="sidebar" id="admin-sidebar">
+                
+                <div class="card">
+                    <h4>📍 City Management</h4>
+                    <input type="text" id="new-city-name" placeholder="City Name">
+                    <input type="text" id="new-city-pass" placeholder="Password">
+                    <button onclick="addCity()" class="blue-btn">Add City</button>
+                </div>
+
+                <div class="card">
+                    <h4>🛣️ Route Connection</h4>
+                    <input type="text" id="route-key" placeholder="Key (e.g. A-B)">
+                    <input type="number" id="route-dist" placeholder="Distance (km)">
+                    <button onclick="addRoute()" class="blue-btn">Connect Route</button>
+                </div>
+
+                <div class="card traffic-card">
+                    <h4>🚦 Traffic Control</h4>
+                    <p class="hint">Enter Route Key (e.g. A-B)</p>
+                    <input type="text" id="block-key" placeholder="Route Key">
+                    <div class="btn-group">
+                        <button onclick="toggleBlock(true)" class="red-btn">Block ⛔</button>
+                        <button onclick="toggleBlock(false)" class="green-btn">Open ✅</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="map-container">
+                <canvas id="mapCanvas"></canvas>
+                
+                <div class="map-controls">
+                    <input type="text" id="start-city" placeholder="Start City">
+                    <input type="text" id="end-city" placeholder="End City">
+                    <button onclick="findPath()" class="action-btn">Find Path 🔍</button>
+                    <span id="path-result"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

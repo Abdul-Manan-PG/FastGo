@@ -1,107 +1,141 @@
-#include <iostream>
-#include <limits> // For numeric limits
+#define CROW_MAIN
+#include "include/crow_all.h"  // Ensure you have this file
 #include "include/FastGo.h"
-
-using namespace std;
-
-// Helper to clear input buffer
-void clearInput() {
-    cin.clear();
-    cin.ignore(numeric_limits<streamsize>::max(), '\n');
-}
-
-void adminMenu(FastGo& app) {
-    int choice;
-    do {
-        cout << "\n=== ADMIN DASHBOARD ===" << endl;
-        cout << "1. Add New City (Manager)" << endl;
-        cout << "2. Add New Route" << endl;
-        cout << "3. Block/Unblock Route" << endl;
-        cout << "4. Logout" << endl;
-        cout << "Enter choice: ";
-        cin >> choice;
-
-        if (choice == 1) {
-            string name, pass;
-            cout << "Enter City Name: ";
-            cin >> name;
-            cout << "Enter Password for Manager: ";
-            cin >> pass;
-            
-            // This will auto-assign the Point ID (0, 1, 2...) inside FastGo.h
-            app.addCity(name, pass);
-
-        } else if (choice == 2) {
-            string key;
-            int dist;
-            cout << "Enter Route Key (e.g., A-B): ";
-            cin >> key;
-            cout << "Enter Distance: ";
-            cin >> dist;
-            
-            app.addRoute(key, dist);
-
-        } else if (choice == 3) {
-            string key;
-            int action;
-            cout << "Enter Route Key: ";
-            cin >> key;
-            cout << "1. Block | 0. Unblock: ";
-            cin >> action;
-            
-            app.toggleRouteBlock(key, (action == 1));
-
-        } else if (choice != 4) {
-            cout << "Invalid choice." << endl;
-        }
-
-    } while (choice != 4);
-    cout << "Logged out." << endl;
-}
-
-void managerMenu(FastGo& app, string cityName) {
-    cout << "\n=== MANAGER DASHBOARD (" << cityName << ") ===" << endl;
-    cout << "You are successfully logged in as a Manager." << endl;
-    cout << "Point ID: " << app.getCities().getPoint(cityName) << endl;
-    
-    // Placeholder for future manager tasks
-    cout << "\nPress Enter to logout...";
-    clearInput(); 
-    cin.get();
-}
+#include "include/CustomGraph.h"
 
 int main() {
-    FastGo app; // Load Database automatically
+    crow::SimpleApp app;
 
-    int choice;
-    while (true) {
-        cout << "\n--- MAIN LOGIN ---" << endl;
-        cout << "1. Login" << endl;
-        cout << "2. Exit" << endl;
-        cout << "Enter choice: ";
-        cin >> choice;
+    // --- System Core ---
+    FastGo appCore; 
+    Graph graph(appCore.getCities(), appCore.getRoutes());
 
-        if (choice == 1) {
-            string user, pass;
-            cout << "Username (or City Name): ";
-            cin >> user;
-            cout << "Password: ";
-            cin >> pass;
+    auto refresh = [&]() { graph.refreshGraph(); };
 
-            if (app.login(user, pass)) {
-                if (app.getRole() == Admin) {
-                    adminMenu(app);
-                } else if (app.getRole() == Manager) {
-                    managerMenu(app, user);
-                }
-            } 
-        } else if (choice == 2) {
-            break;
+    // --- STATIC FILE SERVING (NEW) ---
+    
+    // 1. Serve index.html at root
+    CROW_ROUTE(app, "/")
+    ([](const crow::request&, crow::response& res){
+        res.set_static_file_info("static/index.html");
+        res.end();
+    });
+
+    // 2. Serve CSS/JS files
+    CROW_ROUTE(app, "/<string>")
+    ([](const crow::request&, crow::response& res, string filename){
+        res.set_static_file_info("static/" + filename);
+        res.end();
+    });
+
+    // --- API ENDPOINTS (SAME AS BEFORE) ---
+
+    // Login
+    CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400, "Invalid JSON");
+        string user = x["username"].s();
+        string pass = x["password"].s();
+        string result = appCore.login(user, pass);
+        
+        crow::json::wvalue res;
+        if (result.find("Success") != string::npos) {
+            res["status"] = "success";
+            res["role"] = (appCore.getRole() == Admin) ? "admin" : "manager";
         } else {
-            cout << "Invalid choice." << endl;
-            clearInput();
+            res["status"] = "error";
+            res["message"] = result;
         }
-    }
+        return crow::response(res);
+    });
 
-    return 0;
+    // Add City
+    CROW_ROUTE(app, "/api/add_city").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400);
+        string msg = appCore.addCity(x["name"].s(), x["password"].s());
+        refresh();
+        crow::json::wvalue res; res["message"] = msg;
+        return crow::response(res);
+    });
+
+    // Add Route
+    CROW_ROUTE(app, "/api/add_route").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400);
+        string msg = appCore.addRoute(x["key"].s(), x["distance"].i());
+        refresh();
+        crow::json::wvalue res; res["message"] = msg;
+        return crow::response(res);
+    });
+
+    // Get Map
+    CROW_ROUTE(app, "/api/map")
+    ([&](){
+        crow::json::wvalue res;
+        const auto& nodes = graph.getNodes();
+        const auto& adj = graph.getAdjList();
+
+        for (size_t i = 0; i < nodes.size(); i++) {
+            res["nodes"][i]["id"] = nodes[i].id;
+            res["nodes"][i]["name"] = nodes[i].name;
+            res["nodes"][i]["x"] = nodes[i].x;
+            res["nodes"][i]["y"] = nodes[i].y;
+        }
+
+        int edgeCount = 0;
+        for (const auto& pair : adj) {
+            int u = pair.first;
+            for (const auto& edge : pair.second) {
+                if (edge.to < u) continue;
+                res["edges"][edgeCount]["source"] = u;
+                res["edges"][edgeCount]["target"] = edge.to;
+                res["edges"][edgeCount]["weight"] = edge.weight;
+                res["edges"][edgeCount]["blocked"] = edge.isBlocked;
+                edgeCount++;
+            }
+        }
+        return res;
+    });
+
+    // Get Path
+    CROW_ROUTE(app, "/api/path")
+    ([&](const crow::request& req){
+        string start = req.url_params.get("start");
+        string end = req.url_params.get("end");
+        if (start.empty() || end.empty()) return crow::response(400);
+
+        auto result = graph.getShortestPath(start, end);
+        crow::json::wvalue res;
+        if (result.first != -1) {
+            res["found"] = true;
+            res["distance"] = result.first;
+            for(size_t i = 0; i < result.second.size(); i++) res["path"][i] = result.second[i];
+        } else {
+            res["found"] = false;
+        }
+        return crow::response(res);
+    });
+
+    // Traffic Control (Block/Unblock)
+    CROW_ROUTE(app, "/api/toggle_block").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400);
+
+        string key = x["key"].s();
+        bool shouldBlock = x["block"].b(); // true = block, false = unblock
+
+        string msg = appCore.toggleRouteBlock(key, shouldBlock);
+        refresh(); // Update the graph immediately
+
+        crow::json::wvalue res; 
+        res["message"] = msg;
+        return crow::response(res);
+    });
+
+    app.port(8080).multithreaded().run();
 }
