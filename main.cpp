@@ -1,5 +1,5 @@
 #define CROW_MAIN
-#include "include/crow_all.h"  // Ensure you have this file
+#include "include/crow_all.h"
 #include "include/FastGo.h"
 #include "include/CustomGraph.h"
 
@@ -10,25 +10,27 @@ int main() {
     FastGo appCore; 
     Graph graph(appCore.getCities(), appCore.getRoutes());
 
-    auto refresh = [&]() { graph.refreshGraph(); };
+    // --- REFRESH LAMBDA (DEFINED ONLY ONCE) ---
+    auto refresh = [&]() { 
+        graph.refreshGraph();
+        graph.syncToHash();       
+        appCore.saveCitiesToDB(); 
+    };
 
-    // --- STATIC FILE SERVING (NEW) ---
-    
-    // 1. Serve index.html at root
+    // --- STATIC FILE SERVING ---
     CROW_ROUTE(app, "/")
     ([](const crow::request&, crow::response& res){
         res.set_static_file_info("static/index.html");
         res.end();
     });
 
-    // 2. Serve CSS/JS files
     CROW_ROUTE(app, "/<string>")
     ([](const crow::request&, crow::response& res, string filename){
         res.set_static_file_info("static/" + filename);
         res.end();
     });
 
-    // --- API ENDPOINTS (SAME AS BEFORE) ---
+    // --- API ENDPOINTS ---
 
     // Login
     CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Post)
@@ -56,7 +58,7 @@ int main() {
         auto x = crow::json::load(req.body);
         if (!x) return crow::response(400);
         string msg = appCore.addCity(x["name"].s(), x["password"].s());
-        refresh();
+        refresh(); // Uses the new refresh logic
         crow::json::wvalue res; res["message"] = msg;
         return crow::response(res);
     });
@@ -67,7 +69,7 @@ int main() {
         auto x = crow::json::load(req.body);
         if (!x) return crow::response(400);
         string msg = appCore.addRoute(x["key"].s(), x["distance"].i());
-        refresh();
+        refresh(); 
         crow::json::wvalue res; res["message"] = msg;
         return crow::response(res);
     });
@@ -127,14 +129,33 @@ int main() {
         if (!x) return crow::response(400);
 
         string key = x["key"].s();
-        bool shouldBlock = x["block"].b(); // true = block, false = unblock
+        bool shouldBlock = x["block"].b();
 
         string msg = appCore.toggleRouteBlock(key, shouldBlock);
-        refresh(); // Update the graph immediately
+        refresh(); 
 
         crow::json::wvalue res; 
         res["message"] = msg;
         return crow::response(res);
+    });
+
+    // --- NEW: Drag & Drop Update Endpoint ---
+    CROW_ROUTE(app, "/api/update_node").methods(crow::HTTPMethod::Post)
+    ([&](const crow::request& req){
+        auto x = crow::json::load(req.body);
+        if (!x) return crow::response(400);
+
+        string name = x["name"].s();
+        double newX = x["x"].d();
+        double newY = x["y"].d();
+
+        // 1. Save to DB
+        appCore.updateCityPosition(name, (float)newX, (float)newY);
+        
+        // 2. Update live Graph memory
+        graph.updateNodePos(name, (float)newX, (float)newY);
+
+        return crow::response(200);
     });
 
     app.port(8080).multithreaded().run();

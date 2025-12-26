@@ -57,20 +57,27 @@ public:
         nodes.clear(); adjList.clear(); idToName.clear(); nameToId.clear();
         vector<City> cityData = cityRef.getAll();
         
-        // 1. Initialize Nodes with Random Positions
         for (const auto& c : cityData) {
             Node n; 
             n.id = c.point; 
             n.name = c.name;
-            n.x = static_cast<float>(rand() % (int)WIDTH); 
-            n.y = static_cast<float>(rand() % (int)HEIGHT);
+            
+            // LOGIC CHANGE: If X/Y are stored in DB (not 0), use them. Else Random.
+            if (c.x != 0.0f && c.y != 0.0f) {
+                n.x = c.x;
+                n.y = c.y;
+            } else {
+                n.x = static_cast<float>(rand() % (int)WIDTH); 
+                n.y = static_cast<float>(rand() % (int)HEIGHT);
+            }
+            
             n.vx = 0; n.vy = 0;
             nodes.push_back(n);
             idToName[n.id] = n.name;
             nameToId[n.name] = n.id;
         }
 
-        // 2. Build Adjacency List
+        // ... (Adjacency List building remains the same) ...
         for (const auto& r : routeRef.getAllRoutes()) {
             pair<string, string> cities = parseRouteKey(r.key);
             if (nameToId.count(cities.first) && nameToId.count(cities.second)) {
@@ -81,8 +88,14 @@ public:
             }
         }
 
-        // 3. Pre-Calculate Layout (The "Fast Loading" Magic)
-        optimizeLayout(1000); // Run 1000 physics steps instantly
+        optimizeLayout(1000); 
+    }
+
+    // 2. NEW: Push calculated positions back to SimpleHash
+    void syncToHash() {
+        for (const auto& n : nodes) {
+            cityRef.updatePosition(n.name, n.x, n.y);
+        }
     }
 
     // Server-Side Physics Calculation
@@ -175,6 +188,19 @@ public:
         for (int v = end; v != -1; v = parent[v]) path.push_back(idToName[v]);
         reverse(path.begin(), path.end());
         return {dist[end], path};
+    }
+    
+    void updateNodePos(string name, float x, float y) {
+        if (nameToId.count(name)) {
+            int id = nameToId[name];
+            for (auto& n : nodes) {
+                if (n.id == id) {
+                    n.x = x;
+                    n.y = y;
+                    break;
+                }
+            }
+        }
     }
 
     const vector<Node>& getNodes() const { return nodes; }

@@ -47,6 +47,17 @@ public:
         return "Error: Hash Full";
     }
 
+    void saveCitiesToDB() {
+        cityDB.saveFromSimpleHash(cityHashTable);
+    }  
+
+    void updateCityPosition(string name, float x, float y) {
+        // Update memory
+        cityHashTable.updatePosition(name, x, y);
+        // Save to Disk
+        cityDB.saveFromSimpleHash(cityHashTable);
+    }
+
     string addRoute(string routeKey, int distance) {
         if (currentRole != Admin) return "Error: Access Denied";
         if (routeHashTable.insert(routeKey, distance, false)) {

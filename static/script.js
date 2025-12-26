@@ -4,12 +4,22 @@ let nodes = [];
 let edges = [];
 let highlightedPath = [];
 
+// Drag & Drop State
+let isDragging = false;
+let draggedNode = null;
+let transform = { scale: 1, minX: 0, minY: 0, offsetX: 0, offsetY: 0 }; // Stores map scaling info
+
 window.onload = () => {
     canvas = document.getElementById('mapCanvas');
     ctx = canvas.getContext('2d');
+    
+    // Add Event Listeners for Dragging
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    
     resizeCanvas();
     window.addEventListener('resize', () => { resizeCanvas(); drawMap(); });
-    // Initial Load
     setTimeout(loginCheck, 100); 
 };
 
@@ -20,16 +30,11 @@ function resizeCanvas() {
     }
 }
 
-// Check if we are already 'logged in' visually or need to show login
-function loginCheck() {
-    // Just a helper to keep flow simple
-}
-
 // --- CORE: SCALE & DRAW ---
 function fitMapToScreen() {
     if (nodes.length === 0) return;
 
-    // 1. Find Bounding Box of C++ Coordinates
+    // 1. Calculate Bounds
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     nodes.forEach(n => {
         if(n.x < minX) minX = n.x;
@@ -38,49 +43,108 @@ function fitMapToScreen() {
         if(n.y > maxY) maxY = n.y;
     });
 
-    // 2. Calculate Scale Factors to fit in Canvas
+    // 2. Calculate Scale
     const padding = 50;
     const mapW = maxX - minX || 1;
     const mapH = maxY - minY || 1;
     const canvasW = canvas.width - (padding * 2);
     const canvasH = canvas.height - (padding * 2);
-
     const scale = Math.min(canvasW / mapW, canvasH / mapH);
 
-    // 3. Apply Scale & Center
+    // 3. Save Transform Data (Needed for Reverse Math)
+    transform = {
+        scale: scale,
+        minX: minX,
+        minY: minY,
+        offsetX: padding + (canvasW - mapW * scale) / 2,
+        offsetY: padding + (canvasH - mapH * scale) / 2
+    };
+
+    // 4. Apply to Nodes (Only if NOT dragging, to prevent jitter)
     nodes.forEach(n => {
-        n.displayX = (n.x - minX) * scale + padding + (canvasW - mapW * scale) / 2;
-        n.displayY = (n.y - minY) * scale + padding + (canvasH - mapH * scale) / 2;
+        // We only recalculate display coords if we aren't currently moving this specific node manually
+        if (n !== draggedNode) {
+            n.displayX = (n.x - transform.minX) * transform.scale + transform.offsetX;
+            n.displayY = (n.y - transform.minY) * transform.scale + transform.offsetY;
+        }
     });
+}
+
+// --- DRAG EVENTS ---
+
+function handleMouseDown(e) {
+    const mouseX = e.offsetX;
+    const mouseY = e.offsetY;
+
+    // Check if clicked inside a node (Radius approx 20px)
+    nodes.forEach(n => {
+        const dx = mouseX - n.displayX;
+        const dy = mouseY - n.displayY;
+        if (dx*dx + dy*dy < 400) { // 20^2 = 400
+            isDragging = true;
+            draggedNode = n;
+        }
+    });
+}
+
+function handleMouseMove(e) {
+    if (!isDragging || !draggedNode) return;
+
+    // 1. Update visual position immediately
+    draggedNode.displayX = e.offsetX;
+    draggedNode.displayY = e.offsetY;
+
+    // 2. Reverse Math: Calculate new World X/Y
+    // Formula: World = (Screen - Offset) / Scale + Min
+    draggedNode.x = (draggedNode.displayX - transform.offsetX) / transform.scale + transform.minX;
+    draggedNode.y = (draggedNode.displayY - transform.offsetY) / transform.scale + transform.minY;
+
+    // 3. Redraw
+    drawMap(); 
+}
+
+function handleMouseUp(e) {
+    if (isDragging && draggedNode) {
+        // Save final position to backend
+        saveNodePosition(draggedNode);
+    }
+    isDragging = false;
+    draggedNode = null;
+}
+
+async function saveNodePosition(node) {
+    await fetch(`${API_URL}/update_node`, {
+        method: 'POST',
+        body: JSON.stringify({ name: node.name, x: node.x, y: node.y })
+    });
+}
+
+// Check if we are already 'logged in' visually or need to show login
+function loginCheck() {
+    // Just a helper to keep flow simple
 }
 
 // --- API CALLS ---
 async function loadMap(showLoading = false) {
     if(showLoading) document.getElementById('loading-overlay').style.display = 'flex';
-
     try {
         const res = await fetch(`${API_URL}/map`);
         const data = await res.json();
-        
         if (data.nodes) nodes = data.nodes;
         if (data.edges) edges = data.edges;
-
-        // FIT MAP INSTANTLY
         fitMapToScreen();
         renderRouteManager();
         drawMap();
-
-    } catch (e) {
-        console.error("Load Error", e);
-    } finally {
-        if(showLoading) document.getElementById('loading-overlay').style.display = 'none';
-    }
+    } catch (e) { console.error(e); } 
+    finally { if(showLoading) document.getElementById('loading-overlay').style.display = 'none'; }
 }
 
 // --- RENDERER (No Loop, Just Draw Once) ---
 function drawMap() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    fitMapToScreen(); // Re-fit in case of resize
+    
+    // Only fit if NOT dragging (prevents map from resizing while you move a node)
+    if (!isDragging) fitMapToScreen();
 
     // Draw Edges
     edges.forEach(e => {
@@ -200,3 +264,5 @@ async function findPath() {
 }
 
 function logout() { location.reload(); }
+
+

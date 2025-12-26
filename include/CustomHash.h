@@ -84,6 +84,8 @@ struct City {
     string name;
     int point;
     string password;
+    float x; // NEW
+    float y; // NEW
 };
 
 class SimpleHash {
@@ -102,7 +104,8 @@ public:
         return sum % size;
     }
 
-    bool insert(string key, int value, string password) {
+    // 1. UPDATE: Insert now takes x and y (default to 0.0f)
+    bool insert(string key, int value, string password, float x = 0.0f, float y = 0.0f) {
         int hashIndex = hashFunction(key);
         int firstDeleted = -1;
 
@@ -111,16 +114,33 @@ public:
             if (table[index].name == key) {
                 table[index].point = value;
                 table[index].password = password;
+                // Don't overwrite X/Y with 0 if it already exists and input is 0
+                if (x != 0.0f) table[index].x = x;
+                if (y != 0.0f) table[index].y = y;
                 return true;
             }
             if (table[index].name == "DELETED" && firstDeleted == -1) firstDeleted = index;
             if (table[index].name == "EMPTY") {
                 if (firstDeleted != -1) index = firstDeleted;
-                table[index] = {key, value, password};
+                table[index] = {key, value, password, x, y};
                 return true;
             }
         }
         return false;
+    }
+
+    // 2. NEW: Method to update coordinates specifically
+    void updatePosition(string key, float x, float y) {
+        int hashIndex = hashFunction(key);
+        for (int i = 0; i < size; i++) {
+            int index = (hashIndex + (i * i)) % size;
+            if (table[index].name == "EMPTY") return;
+            if (table[index].name == key) {
+                table[index].x = x;
+                table[index].y = y;
+                return;
+            }
+        }
     }
 
     int getPoint(string key) {
