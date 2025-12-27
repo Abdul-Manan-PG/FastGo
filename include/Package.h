@@ -16,6 +16,7 @@ enum PackageType
     TWODAY = 2,
     NORMAL = 3
 };
+
 enum PkgStatus
 {
     CREATED = 0,
@@ -24,8 +25,9 @@ enum PkgStatus
     ARRIVED = 3,
     DELIVERED = 4,
     FAILED = 5,
-    AT_HUB = 6,          // New: Waiting for assignment
-    OUT_FOR_DELIVERY = 7 // New: With Rider
+    AT_HUB = 6,
+    OUT_FOR_DELIVERY = 7,
+    RETURNED = 8 // [NEW] Status for returned packages
 };
 
 struct Package
@@ -41,10 +43,10 @@ struct Package
     double weight;
     int status;
     int ticks;
-    int riderId;  // NEW: 0 if none
-    int attempts; // NEW: 0-3
+    int riderId;
+    int attempts;
+    double price; // [NEW] Price field
 
-    // NEW: History (format: "City|Time") and Route (format: "City")
     string historyStr;
     string routeStr;
 };
@@ -59,16 +61,19 @@ public:
     PackageDatabase(const string &filename = "packages.db")
     {
         sqlite3_open(filename.c_str(), &db_);
-        // Updated Table Schema
+
+        // [UPDATED] Schema includes Price
         const char *sql = "CREATE TABLE IF NOT EXISTS Packages ("
                           "ID INTEGER PRIMARY KEY AUTOINCREMENT, "
                           "Sender TEXT, Receiver TEXT, Address TEXT, "
                           "SourceCity TEXT, DestCity TEXT, CurrentCity TEXT, "
                           "Type INT, Weight REAL, Status INT, Ticks INT, "
-                          "History TEXT, RoutePlan TEXT);"; // New Columns
-        sqlite3_exec(db_, "ALTER TABLE Packages ADD COLUMN RiderID INT DEFAULT 0;", nullptr, nullptr, nullptr);
-        sqlite3_exec(db_, "ALTER TABLE Packages ADD COLUMN Attempts INT DEFAULT 0;", nullptr, nullptr, nullptr);
+                          "History TEXT, RoutePlan TEXT, RiderID INT DEFAULT 0, "
+                          "Attempts INT DEFAULT 0, Price REAL DEFAULT 0.0);";
+
+        // Migration helpers for existing databases
         sqlite3_exec(db_, sql, nullptr, nullptr, nullptr);
+        sqlite3_exec(db_, "ALTER TABLE Packages ADD COLUMN Price REAL DEFAULT 0.0;", nullptr, nullptr, nullptr);
     }
     ~PackageDatabase()
     {
@@ -76,10 +81,11 @@ public:
             sqlite3_close(db_);
     }
 
+    // [UPDATED] Add Package with Price
     void addPackage(const Package &p)
     {
-        string sql = "INSERT INTO Packages (Sender, Receiver, Address, SourceCity, DestCity, CurrentCity, Type, Weight, Status, Ticks, History, RoutePlan) "
-                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?);";
+        string sql = "INSERT INTO Packages (Sender, Receiver, Address, SourceCity, DestCity, CurrentCity, Type, Weight, Status, Ticks, History, RoutePlan, Price) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?);";
         sqlite3_stmt *stmt;
         sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
         sqlite3_bind_text(stmt, 1, p.sender.c_str(), -1, SQLITE_STATIC);
@@ -93,6 +99,7 @@ public:
         sqlite3_bind_int(stmt, 9, p.status);
         sqlite3_bind_text(stmt, 10, p.historyStr.c_str(), -1, SQLITE_STATIC);
         sqlite3_bind_text(stmt, 11, p.routeStr.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_double(stmt, 12, p.price); // Bind Price
         sqlite3_step(stmt);
         sqlite3_finalize(stmt);
     }
@@ -122,13 +129,33 @@ public:
         sqlite3_finalize(stmt);
     }
 
-    // Helper to extract a single package row
-    // Helper to extract a single package row
-    // Helper to extract a single package row
+    void assignRider(int pkgId, int riderId)
+    {
+        string sql = "UPDATE Packages SET RiderID = ?, Status = ? WHERE ID = ?";
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+        sqlite3_bind_int(stmt, 1, riderId);
+        sqlite3_bind_int(stmt, 2, OUT_FOR_DELIVERY);
+        sqlite3_bind_int(stmt, 3, pkgId);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
+    void updateAttempts(int id, int attempts, int status)
+    {
+        string sql = "UPDATE Packages SET Attempts = ?, Status = ? WHERE ID = ?";
+        sqlite3_stmt *stmt;
+        sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+        sqlite3_bind_int(stmt, 1, attempts);
+        sqlite3_bind_int(stmt, 2, status);
+        sqlite3_bind_int(stmt, 3, id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+
     Package extractPackage(sqlite3_stmt *stmt)
     {
         Package p;
-        // Columns 0-10: Basic Info
         p.id = sqlite3_column_int(stmt, 0);
         p.sender = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
         p.receiver = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
@@ -141,19 +168,14 @@ public:
         p.status = sqlite3_column_int(stmt, 9);
         p.ticks = sqlite3_column_int(stmt, 10);
 
-        // Column 11: History
         const char *h = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 11));
         p.historyStr = h ? h : "";
-
-        // Column 12: RoutePlan
         const char *r = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 12));
         p.routeStr = r ? r : "";
 
-        // --- FIX START ---
-        // Read the new columns so logic doesn't use garbage values
         p.riderId = sqlite3_column_int(stmt, 13);
         p.attempts = sqlite3_column_int(stmt, 14);
-        // --- FIX END ---
+        p.price = sqlite3_column_double(stmt, 15); // [NEW] Extract Price
 
         return p;
     }
@@ -183,31 +205,6 @@ public:
             pkgs.push_back(extractPackage(stmt));
         sqlite3_finalize(stmt);
         return pkgs;
-    }
-
-    // 4. Add these new methods to PackageDatabase class
-    void assignRider(int pkgId, int riderId)
-    {
-        string sql = "UPDATE Packages SET RiderID = ?, Status = ? WHERE ID = ?";
-        sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
-        sqlite3_bind_int(stmt, 1, riderId);
-        sqlite3_bind_int(stmt, 2, OUT_FOR_DELIVERY); // Status 7
-        sqlite3_bind_int(stmt, 3, pkgId);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
-    }
-
-    void updateAttempts(int id, int attempts, int status)
-    {
-        string sql = "UPDATE Packages SET Attempts = ?, Status = ? WHERE ID = ?";
-        sqlite3_stmt *stmt;
-        sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
-        sqlite3_bind_int(stmt, 1, attempts);
-        sqlite3_bind_int(stmt, 2, status);
-        sqlite3_bind_int(stmt, 3, id);
-        sqlite3_step(stmt);
-        sqlite3_finalize(stmt);
     }
 };
 

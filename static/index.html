@@ -36,6 +36,7 @@
 
         <div class="container">
             <div class="sidebar" id="sidebar-container">
+                
                 <div id="rider-tools" style="display:none;">
                     <div class="card">
                         <h4>🛵 My Deliveries</h4>
@@ -43,6 +44,7 @@
                         <div id="rider-pkg-list" class="route-list-container"></div>
                     </div>
                 </div>
+
                 <div id="manager-courier-module" style="display:none;">
                      <div class="card">
                         <h4>👤 Create Rider</h4>
@@ -59,11 +61,18 @@
                         <div id="courier-list" class="route-list-container"></div>
                     </div>
                 </div>
+
                 <div id="pkg-tracking-pane" class="card" style="display:none; border:2px solid #3498db;">
                     <h4>📦 Tracking Info</h4>
                     <p><b>ID:</b> #<span id="trk-id"></span></p>
                     <p><b>Status:</b> <span id="trk-status" class="status-badge"></span></p>
-                    <p><b>Current:</b> <span id="trk-current" style="color:#e67e22; font-weight:bold;"></span></p>
+                    
+                    <div style="display:flex; gap:5px; margin: 10px 0;">
+                        <button onclick="trackPrev()" style="background:#f39c12;">⬅ Previous</button>
+                        <button onclick="trackNext()" style="background:#27ae60;">Next ➡</button>
+                    </div>
+
+                    <p><b>Current View:</b> <span id="trk-current" style="color:#e67e22; font-weight:bold;"></span></p>
                     
                     <h4>History (Green)</h4>
                     <div id="trk-history-list" style="font-size:11px; max-height:100px; overflow-y:auto; margin-bottom:10px;"></div>
@@ -83,6 +92,28 @@
                 </div>
 
                 <div id="admin-tools" style="display:none;">
+                    <div class="card" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color:white;">
+                        <h4>📊 System Dashboard</h4>
+                        <div style="display:flex; justify-content: space-around; text-align:center; margin-top:10px;">
+                            <div>
+                                <div style="font-size:20px; font-weight:bold; color:#2ecc71;" id="stat-revenue">$0</div>
+                                <div style="font-size:11px; opacity:0.8;">Revenue</div>
+                            </div>
+                            <div>
+                                <div style="font-size:20px; font-weight:bold;" id="stat-delivered">0</div>
+                                <div style="font-size:11px; opacity:0.8;">Delivered</div>
+                            </div>
+                            <div>
+                                <div style="font-size:20px; font-weight:bold; color:#3498db;" id="stat-transit">0</div>
+                                <div style="font-size:11px; opacity:0.8;">In Transit</div>
+                            </div>
+                            <div>
+                                <div style="font-size:20px; font-weight:bold; color:#e74c3c;" id="stat-failed">0</div>
+                                <div style="font-size:11px; opacity:0.8;">Failed</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card">
                         <button class="tab-btn active" onclick="loadAdminPackages()">All Packages</button>
                         <div id="admin-pkg-list" class="tab-content active" style="max-height:200px;"></div>

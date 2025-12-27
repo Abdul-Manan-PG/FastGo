@@ -27,7 +27,10 @@ int main()
 
     auto refresh = [&]()
     {
+        // 1. Refresh logic (reloads from DB)
         graph.refreshGraph();
+
+        // 2. Sync ensures any in-memory changes are pushed back (safety)
         graph.syncToHash();
         appCore.saveCitiesToDB();
     };
@@ -145,18 +148,19 @@ int main()
         }
         return crow::response(res); });
 
-    // 5. Update Status (Load/Deliver)
+    // 5. Update Status (Load/Deliver/Return)
     CROW_ROUTE(app, "/api/update_pkg_status").methods(crow::HTTPMethod::Post)([&](const crow::request &req)
-                                                                              {
+    {
         auto x = crow::json::load(req.body);
         int status = 0;
         string action = x["action"].s();
-        if (action == "load") status = 1;      // LOADED
-        else if (action == "deliver") status = 4; // DELIVERED
-        else if (action == "return") status = 5;  // FAILED/RETURN
+        if (action == "load") status = 1;      
+        else if (action == "deliver") status = 4; 
+        else if (action == "return") status = 8;  // UPDATED: 8 = RETURNED
         
         appCore.updatePkgStatusSimple(x["id"].i(), status);
-        return crow::response(200); });
+        return crow::response(200); 
+    });
 
     // --- SIMULATION ---
     CROW_ROUTE(app, "/api/next_shift").methods(crow::HTTPMethod::Post)([&]()
@@ -256,8 +260,23 @@ int main()
     CROW_ROUTE(app, "/api/assign_packages").methods(crow::HTTPMethod::Post)([&](const crow::request &req)
                                                                             {
         auto x = crow::json::load(req.body);
-        string msg = appCore.assignPackagesToRider(x["riderId"].i());
-        crow::json::wvalue res; res["message"] = msg;
+        if (!x) return crow::response(400);
+
+        int riderId = x["riderId"].i();
+        vector<int> pkgIds;
+
+        // Loop through the JSON array "packageIds" sent from frontend
+        if (x.has("packageIds")) {
+            for (const auto& item : x["packageIds"]) {
+                pkgIds.push_back(item.i());
+            }
+        }
+
+        // Pass the specific list to the core logic
+        string msg = appCore.assignPackagesToRider(riderId, pkgIds);
+        
+        crow::json::wvalue res; 
+        res["message"] = msg;
         return crow::response(res); });
 
     // Get packages assigned to the logged-in rider
@@ -281,6 +300,24 @@ int main()
         string msg = appCore.riderAction(x["id"].i(), x["action"].s());
         crow::json::wvalue res; res["message"] = msg;
         return crow::response(res); });
+
+    // --- ADMIN STATS ---
+    CROW_ROUTE(app, "/api/admin_stats")
+    ([&]()
+     {
+        if(appCore.getRole() != Admin) return crow::response(403);
+        
+        // Use the new helper struct
+        auto stats = appCore.getSystemStats();
+
+        crow::json::wvalue res;
+        res["revenue"] = stats.revenue;
+        res["delivered"] = stats.delivered;
+        res["inTransit"] = stats.inTransit;
+        res["failed"] = stats.failed;
+        
+        return crow::response(res); });
+    
 
     app.port(8080).multithreaded().run();
 }

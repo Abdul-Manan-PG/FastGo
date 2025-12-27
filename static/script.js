@@ -15,6 +15,10 @@ let transform = { scale: 1, minX: 0, minY: 0, offsetX: 0, offsetY: 0 };
 let trackingActive = false;
 let trackData = null; // { history: [{city, time}], future: [city, city] }
 
+// NEW: Stacks for History Navigation
+let historyStack = []; // Stores the currently visible path
+let futureStack = [];  // Stores the points we moved back from
+
 window.onload = () => {
     canvas = document.getElementById('mapCanvas');
     ctx = canvas.getContext('2d');
@@ -64,11 +68,12 @@ function setupDashboard(role, city) {
         document.getElementById('admin-tools').style.display = 'block';
         document.getElementById('admin-controls').style.display = 'block';
         loadAdminPackages();
+        loadAdminStats(); // <--- ADD THIS
     } else if (userRole === 'manager') {
         // Manager starts on the Package View
         document.getElementById('manager-tools').style.display = 'block';
         // Add Toggle Buttons dynamically if not present
-        if(!document.getElementById('mgr-toggle-container')) addManagerToggles();
+        if (!document.getElementById('mgr-toggle-container')) addManagerToggles();
         loadManagerPackages();
     } else if (userRole === 'rider') {
         document.getElementById('rider-tools').style.display = 'block';
@@ -96,35 +101,72 @@ async function startTracking(id) {
     trackData = data;
     trackingActive = true;
 
+    // --- NEW: Initialize Stacks ---
+    // Deep copy the history array into our Stack
+    historyStack = [...data.history];
+    futureStack = [];
+    // ------------------------------
+
     // Show tracking pane
     document.getElementById('pkg-tracking-pane').style.display = 'block';
 
-    // Hide toolbars if not guest to give space
+    // Hide toolbars logic... (Keep existing code)
     if (userRole === 'manager') document.getElementById('manager-tools').style.display = 'none';
     if (userRole === 'admin') document.getElementById('admin-tools').style.display = 'none';
     if (userRole !== 'guest') document.getElementById('close-tracking-btn').style.display = 'block';
 
-    // Populate Tracking Pane
+    // Populate Tracking Pane logic... (Keep existing code)
     document.getElementById('trk-id').innerText = data.id;
     document.getElementById('trk-status').innerText = getStatusName(data.status);
     document.getElementById('trk-status').className = `status-badge st-${data.status}`;
-    document.getElementById('trk-current').innerText = data.current;
 
-    // History List
+    // Initial Render
+    updateTrackingUI();
+    drawMap();
+}
+
+// --- NEW TRACKING NAVIGATION FUNCTIONS ---
+
+function trackPrev() {
+    // We need at least one item to remain (the start point)
+    if (historyStack.length > 1) {
+        const point = historyStack.pop(); // Remove from History (LIFO)
+        futureStack.push(point);          // Add to Future Stack
+        updateTrackingUI();
+        drawMap();
+    }
+}
+
+function trackNext() {
+    // If there is anything in the Future stack to "redo"
+    if (futureStack.length > 0) {
+        const point = futureStack.pop();  // Remove from Future (LIFO)
+        historyStack.push(point);         // Add back to History
+        updateTrackingUI();
+        drawMap();
+    }
+}
+
+function updateTrackingUI() {
+    // Update the "Current View" text based on the top of the History Stack
+    const currentPoint = historyStack[historyStack.length - 1];
+    if (currentPoint) {
+        document.getElementById('trk-current').innerText = currentPoint.city;
+    }
+
+    // Update History List based on Stack
     const histDiv = document.getElementById('trk-history-list');
-    histDiv.innerHTML = data.history.map(h =>
+    histDiv.innerHTML = historyStack.map(h =>
         `<div>✅ ${h.city} <span style="color:#777; font-size:10px;">${h.time.split(' ')[1] || ''}</span></div>`
     ).join('');
 
-    // Future List
+    // Future list remains static (the originally planned route)
     const futDiv = document.getElementById('trk-future-list');
-    if (data.future && data.future.length > 0) {
-        futDiv.innerHTML = data.future.map(c => `<div>🔹 ${c}</div>`).join('');
+    if (trackData.future && trackData.future.length > 0) {
+        futDiv.innerHTML = trackData.future.map(c => `<div>🔹 ${c}</div>`).join('');
     } else {
         futDiv.innerHTML = "<div>🏁 Arrived / No Plan</div>";
     }
-
-    drawMap();
 }
 
 function closeTracking() {
@@ -193,7 +235,7 @@ function drawMap() {
             // Optional: Draw a small white background for readability
             ctx.font = "bold 11px Arial";
             const textWidth = ctx.measureText(distText).width;
-            
+
             ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
             ctx.fillRect(midX - textWidth / 2 - 2, midY - 6, textWidth + 4, 12);
 
@@ -210,11 +252,11 @@ function drawMap() {
     if (trackingActive && trackData) {
 
         // A. HISTORY (Solid Green)
-        if (trackData.history && trackData.history.length > 1) {
+        if (historyStack.length > 1) {
             ctx.beginPath(); ctx.lineWidth = 4; ctx.strokeStyle = '#27ae60'; ctx.lineCap = 'round';
-            for (let i = 0; i < trackData.history.length - 1; i++) {
-                const n1 = nodes.find(n => n.name === trackData.history[i].city);
-                const n2 = nodes.find(n => n.name === trackData.history[i + 1].city);
+            for (let i = 0; i < historyStack.length - 1; i++) {
+                const n1 = nodes.find(n => n.name === historyStack[i].city);
+                const n2 = nodes.find(n => n.name === historyStack[i + 1].city);
                 if (n1 && n2) { ctx.moveTo(n1.displayX, n1.displayY); ctx.lineTo(n2.displayX, n2.displayY); }
             }
             ctx.stroke();
@@ -241,18 +283,25 @@ function drawMap() {
     }
 
     // 3. Draw Nodes
+    // 3. Draw Nodes
+
+    // --- FIX STARTS HERE ---
+    let currentVisCity = null;
+    // Only calculate this if we are actively tracking and have history
+    if (trackingActive && historyStack.length > 0) {
+        currentVisCity = historyStack[historyStack.length - 1].city;
+    }
+    // --- FIX ENDS HERE ---
+
     nodes.forEach(n => {
-        let color = '#3498db'; let radius = 18;
+        let color = '#3498db'; // Default Blue
+        let radius = 18;
 
-        if (trackingActive && trackData) {
-            color = '#ecf0f1'; // Fade out irrelevant
-
-            // Check History
-            if (trackData.history.some(h => h.city === n.name)) color = '#27ae60';
-            // Check Future
-            if (trackData.future && trackData.future.includes(n.name)) color = '#3498db';
-            // Check Ends
-            if (n.name === trackData.current) { color = '#e67e22'; radius = 22; }
+        if (trackingActive) {
+            // Check History Stack
+            if (historyStack.some(h => h.city === n.name)) color = '#27ae60';
+            // Check Current Stack Top
+            if (n.name === currentVisCity) { color = '#e67e22'; radius = 22; }
         }
 
         ctx.beginPath(); ctx.arc(n.displayX, n.displayY, radius, 0, 2 * Math.PI);
@@ -270,6 +319,7 @@ function drawMap() {
 
 // --- DATA FETCHERS ---
 
+// 2. Manager Packages (With 'Return' button for Failed items)
 async function loadManagerPackages() {
     if (userRole !== 'manager') return;
     const res = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
@@ -281,16 +331,22 @@ async function loadManagerPackages() {
             ${btn}
         </div>`;
 
+    // Outgoing
     document.getElementById('tab-outgoing').innerHTML = pkgs.filter(p => p.status <= 1 && p.current === userCity)
         .map(p => render(p, p.status === 0 ? `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'load')">Load</button>` : '')).join('');
 
-    document.getElementById('tab-incoming').innerHTML = pkgs.filter(p => p.status === 3 && p.current === userCity)
-        .map(p => `
-            <div class="pkg-item" onclick="startTracking(${p.id})">
-                <b>#${p.id}</b> from ${p.sender}
-                <button onclick="event.stopPropagation(); updatePkg(${p.id}, 'deliver')">Deliver</button>
-                <button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')">Return</button>
-            </div>`).join('');
+    // Incoming: Show Arrived (3) AND Failed (5) packages here
+    document.getElementById('tab-incoming').innerHTML = pkgs.filter(p => (p.status === 3 || p.status === 5) && p.current === userCity)
+        .map(p => {
+            let actionBtn = '';
+            if(p.status === 3) {
+                 actionBtn = `<div style="font-size:11px; color:#e67e22;">⬇ Arrived (Go to Riders)</div>`;
+            } else if (p.status === 5) {
+                 // FAILED STATUS -> Show Return Button
+                 actionBtn = `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')" style="background:#c0392b;">↩ Return to Sender</button>`;
+            }
+            return render(p, actionBtn);
+        }).join('');
 
     document.getElementById('tab-history').innerHTML = pkgs.map(p => render(p)).join('');
 }
@@ -305,8 +361,50 @@ async function loadAdminPackages() {
         </div>`).join('');
 }
 
+// 3. Admin Stats Loader
+async function loadAdminStats() {
+    if (userRole !== 'admin') return;
+    const res = await fetch(`${API_URL}/admin_stats`);
+    const stats = await res.json();
+    
+    // Inject into HTML (Make sure elements exist, see step 5)
+    document.getElementById('stat-revenue').innerText = "$" + stats.revenue.toFixed(2);
+    document.getElementById('stat-delivered').innerText = stats.delivered;
+    document.getElementById('stat-transit').innerText = stats.inTransit;
+    document.getElementById('stat-failed').innerText = stats.failed;
+}
+
 // --- ACTIONS & HELPERS ---
-async function createPackage() { const body = { sender: document.getElementById('pkg-sender').value, receiver: document.getElementById('pkg-receiver').value, address: document.getElementById('pkg-addr').value, dest: document.getElementById('pkg-dest').value, type: parseInt(document.getElementById('pkg-type').value), weight: parseFloat(document.getElementById('pkg-weight').value) }; await fetch(`${API_URL}/add_package`, { method: 'POST', body: JSON.stringify(body) }); loadManagerPackages(); }
+async function createPackage() {
+    const sender = document.getElementById('pkg-sender').value;
+    const weight = parseFloat(document.getElementById('pkg-weight').value);
+    const type = parseInt(document.getElementById('pkg-type').value);
+    
+    if(!weight || !sender) { alert("Please fill details"); return; }
+
+    // --- CLIENT SIDE PRICE ESTIMATION ---
+    let base = 10;
+    let weightCost = weight * 2;
+    let priorityCost = (type === 1) ? 50 : (type === 2 ? 20 : 0);
+    let estimatedPrice = base + weightCost + priorityCost;
+
+    // --- CONFIRMATION MODAL ---
+    const confirmed = confirm(`Estimated Price: $${estimatedPrice.toFixed(2)}\n\nDo you want to create this package?`);
+    if(!confirmed) return;
+
+    const body = { 
+        sender: sender, 
+        receiver: document.getElementById('pkg-receiver').value, 
+        address: document.getElementById('pkg-addr').value, 
+        dest: document.getElementById('pkg-dest').value, 
+        type: type, 
+        weight: weight 
+    }; 
+    
+    await fetch(`${API_URL}/add_package`, { method: 'POST', body: JSON.stringify(body) }); 
+    loadManagerPackages(); 
+}
+
 async function updatePkg(id, action) { await fetch(`${API_URL}/update_pkg_status`, { method: 'POST', body: JSON.stringify({ id, action }) }); loadManagerPackages(); }
 async function addCity() { await fetch(`${API_URL}/add_city`, { method: 'POST', body: JSON.stringify({ name: document.getElementById('new-city-name').value, password: document.getElementById('new-city-pass').value }) }); loadMap(); }
 async function addRoute() { await fetch(`${API_URL}/add_route`, { method: 'POST', body: JSON.stringify({ key: document.getElementById('route-key').value, distance: parseInt(document.getElementById('route-dist').value) }) }); loadMap(); }
@@ -327,13 +425,21 @@ async function loadRidersAndAssignments() {
     // Load Riders
     const res = await fetch(`${API_URL}/get_riders`);
     const riders = await res.json();
-    
-    // Load Packages at Hub (Status 6)
+
+    // Load Packages at Hub
     const res2 = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
     const allPkgs = await res2.json();
-    const hubPkgs = allPkgs.filter(p => p.status === 6); // 6 = AT_HUB
 
-    let html = `<div style="font-size:11px; margin-bottom:5px;">Waiting at Hub: ${hubPkgs.length}</div>`;
+    // UPDATED: Look for Status 3 (Arrived) OR 6 (At Hub) so they appear in the list
+    const hubPkgs = allPkgs.filter(p => p.status === 3 || p.status === 6); 
+
+    let html = `<div style="font-size:11px; margin-bottom:5px;">Waiting for Assignment: ${hubPkgs.length}</div>`;
+    
+    // Only show riders if we have them
+    if(riders.length === 0) {
+        html += `<div style="padding:10px; color:#777; font-size:12px;">No Riders Found</div>`;
+    }
+
     riders.forEach(r => {
         html += `
             <div style="background:#f9f9f9; padding:8px; border-bottom:1px solid #ddd;">
@@ -346,9 +452,37 @@ async function loadRidersAndAssignments() {
 }
 
 async function assignPackages(riderId) {
-    const res = await fetch(`${API_URL}/assign_packages`, { method: 'POST', body: JSON.stringify({ riderId }) });
+    // 1. Find the packages that need assignment (Status 3 or 6)
+    const resPkgs = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
+    const allPkgs = await resPkgs.json();
+    
+    // Filter for packages that are 'Arrived' (3) or 'At Hub' (6)
+    const packagesToAssign = allPkgs.filter(p => p.status === 3 || p.status === 6);
+
+    if (packagesToAssign.length === 0) {
+        alert("No packages available to assign.");
+        return;
+    }
+
+    // 2. Get the list of IDs (e.g., [101, 102])
+    const packageIds = packagesToAssign.map(p => p.id);
+
+    console.log(`Assigning packages ${packageIds.join(',')} to Rider ${riderId}`);
+
+    // 3. Send Rider ID AND Package IDs to the backend
+    const res = await fetch(`${API_URL}/assign_packages`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            riderId: riderId, 
+            packageIds: packageIds // sending the specific list
+        }) 
+    });
+
     const data = await res.json();
     alert(data.message);
+    
+    // 4. Refresh the view
     loadRidersAndAssignments();
 }
 
@@ -378,15 +512,15 @@ async function createRider() {
     const u = document.getElementById('rider-user').value;
     const p = document.getElementById('rider-pass').value;
     const v = document.getElementById('rider-veh').value;
-    
-    if(!u || !p) { alert("Please enter username and password"); return; }
+
+    if (!u || !p) { alert("Please enter username and password"); return; }
 
     const res = await fetch(`${API_URL}/add_rider`, {
         method: 'POST',
         body: JSON.stringify({ username: u, password: p, vehicle: v })
     });
-    
-    if(res.ok) {
+
+    if (res.ok) {
         alert("Rider Added Successfully");
         document.getElementById('rider-user').value = "";
         document.getElementById('rider-pass').value = "";
@@ -397,32 +531,43 @@ async function createRider() {
 }
 
 // 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
+// 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
 async function loadRiderPackages() {
     const res = await fetch(`${API_URL}/rider_packages`);
     const pkgs = await res.json();
     const list = document.getElementById('rider-pkg-list');
-    
-    if(pkgs.length === 0) {
+
+    if (pkgs.length === 0) {
         list.innerHTML = "<div style='padding:10px; color:#777;'>No active deliveries</div>";
         return;
     }
 
-    list.innerHTML = pkgs.map(p => `
-        <div class="pkg-item" style="border-left: 4px solid #3498db;">
-            <div style="font-size:14px; font-weight:bold;">#${p.id} - ${p.receiver}</div>
+    list.innerHTML = pkgs.map(p => {
+        // Warning for previous failed attempts
+        const attemptWarn = p.attempts > 0 
+            ? `<span style="color:#c0392b; font-size:11px; margin-left:5px;">(Attempt ${p.attempts + 1}/3)</span>` 
+            : '';
+
+        return `
+        <div class="pkg-item" style="border-left: 4px solid #3498db;" onclick="startTracking(${p.id})">
+            <div style="font-size:14px; font-weight:bold;">
+                #${p.id} - ${p.receiver} 
+                ${attemptWarn}
+            </div>
             <div style="font-size:12px; margin-bottom:5px;">📍 ${p.address}</div>
+            
             <div style="display:flex; gap:5px;">
-                <button onclick="riderAction(${p.id}, 'delivered')" 
+                <button onclick="event.stopPropagation(); riderAction(${p.id}, 'delivered')" 
                     style="background:#27ae60; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
                     ✅ Delivered
                 </button>
-                <button onclick="riderAction(${p.id}, 'failed')" 
+                <button onclick="event.stopPropagation(); riderAction(${p.id}, 'failed')" 
                     style="background:#c0392b; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
                     ❌ Failed
                 </button>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Helper to inject toggle buttons for Manager

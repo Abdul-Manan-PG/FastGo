@@ -102,12 +102,24 @@ public:
         return "Error: Invalid Credentials";
     }
 
+    // // --- Helper: Get Current Time as String ---
+    // string getCurrentTime()
+    // {
+    //     time_t now = time(0);
+    //     tm *ltm = localtime(&now);
+    //     char buffer[80];
+    //     // CHANGED: Removed seconds (%S) to match "Date then hour : minute" requirement
+    //     strftime(buffer, 80, "%Y-%m-%d %H:%M", ltm);
+    //     return string(buffer);
+    // }
+
     string getLoggedCity() { return currentUserCity; }
 
     // --- Package Management ---
 
     // 1. Create Package
     // Calculates the INITIAL route plan immediately so it can be tracked
+    // 1. Create Package [UPDATED WITH PRICING]
     void createPackage(string sender, string receiver, string addr, string dest, int type, double weight, Graph &graph)
     {
         Package p;
@@ -122,36 +134,67 @@ public:
         p.status = CREATED;
         p.ticks = 0;
 
-        // A. Initial History: "SourceCity|Time"
+        // --- NEW: Calculate Price ---
+        // Formula: Base($10) + (Weight * $2) + Priority Surcharge
+        double basePrice = 10.0;
+        double weightCost = weight * 2.0;
+        double priorityCost = 0.0;
+        
+        if (type == OVERNIGHT) priorityCost = 50.0;
+        else if (type == TWODAY) priorityCost = 20.0;
+        // Normal = 0
+
+        p.price = basePrice + weightCost + priorityCost;
+        // ----------------------------
+
         p.historyStr = currentUserCity + "|" + getCurrentTime();
 
-        // B. Initial Future Route: Calculate path from Source -> Dest
         auto res = graph.getShortestPath(currentUserCity, dest);
-        if (res.first != -1)
-        {
-            // Save the full list of cities as the planned route
-            p.routeStr = vecToString(res.second);
-        }
-        else
-        {
-            p.routeStr = ""; // No route currently available
-        }
+        if (res.first != -1) p.routeStr = vecToString(res.second);
+        else p.routeStr = "";
 
         pkgDB.addPackage(p);
     }
 
-    // 2. Simple Status Update (Load, Deliver, Return)
-    // Used when the manager clicks buttons. Does not move the package physically.
+    // 2. Simple Status Update [UPDATED FOR RETURN]
     void updatePkgStatusSimple(int id, int status)
     {
         Package p = pkgDB.getPackage(id);
         if (p.id != -1)
         {
-            // Preserve existing location, history, and route. Only change status.
-            pkgDB.updateStatusAndRoute(id, status, p.currentCity, p.historyStr, p.routeStr);
+            // If returning, update status to RETURNED (8) and add history
+            if(status == RETURNED) {
+                 string newHist = p.historyStr + ",RETURNED TO SENDER|" + getCurrentTime();
+                 pkgDB.updateStatusAndRoute(id, RETURNED, p.currentCity, newHist, "");
+            } else {
+                 pkgDB.updateStatusAndRoute(id, status, p.currentCity, p.historyStr, p.routeStr);
+            }
         }
     }
 
+    // --- NEW: ADMIN STATS HELPER ---
+    struct AdminStats {
+        double revenue;
+        int delivered;
+        int inTransit;
+        int failed;
+    };
+
+    AdminStats getSystemStats() {
+        vector<Package> all = pkgDB.getAllPackages();
+        AdminStats stats = {0.0, 0, 0, 0};
+
+        for(const auto& p : all) {
+            // Sum Revenue (Price) for valid packages (exclude cancelled if any, or just sum all created)
+            stats.revenue += p.price;
+
+            if(p.status == DELIVERED) stats.delivered++;
+            else if(p.status == IN_TRANSIT || p.status == OUT_FOR_DELIVERY) stats.inTransit++;
+            else if(p.status == FAILED || p.status == RETURNED) stats.failed++;
+        }
+        return stats;
+    }
+    
     // --- THE CORE SIMULATION LOOP ---
     // Moves packages, updates history, and recalculates future routes
     vector<string> runTimeStep(Graph &graph)
@@ -328,59 +371,46 @@ public:
     void saveCitiesToDB() { cityDB.saveFromSimpleHash(cityHashTable); }
 
     // 1. New Assignment Logic
-    string assignPackagesToRider(int riderId)
+    string assignPackagesToRider(int riderId, const vector<int> &pkgIds)
     {
-        // Fetch Rider
-        vector<Rider> riders = riderDB.getRidersByCity(currentUserCity);
-        Rider targetRider = {-1};
-        for (auto &r : riders)
-            if (r.id == riderId)
-                targetRider = r;
-        if (targetRider.id == -1)
-            return "Error: Rider not found";
-
-        // Get Packages waiting at Hub
-        vector<Package> all = pkgDB.getAllPackages();
-        vector<Package> pool;
-        for (auto &p : all)
-        {
-            if (p.currentCity == currentUserCity && p.status == AT_HUB)
-            {
-                pool.push_back(p);
-            }
-        }
-
-        // Sort: Priority First (Type 1 < 2 < 3), then Weight
-        sort(pool.begin(), pool.end(), [](const Package &a, const Package &b)
-             {
-            if (a.type != b.type) return a.type < b.type;
-            return a.weight < b.weight; });
-
         int count = 0;
-        double load = 0;
-        bool isBike = (targetRider.vehicle == "bike");
 
-        for (auto &p : pool)
+        // 1. Find the Rider
+        // Retrieve the list of riders in the current city from the DB
+        vector<Rider> cityRiders = riderDB.getRidersByCity(currentUserCity);
+        bool riderFound = false;
+        for (const auto &r : cityRiders)
         {
-            if (isBike)
+            if (r.id == riderId)
             {
-                if (p.weight >= 2.0 || count >= 10)
-                    continue; // Bike Constraints
-                pkgDB.assignRider(p.id, targetRider.id);
-                count++;
+                riderFound = true;
+                break;
             }
-            else
+        }
+        if (!riderFound)
+            return "Error: Rider not found in your city";
+
+        // 2. Loop through provided Package IDs
+        for (int pkgId : pkgIds)
+        {
+            // Retrieve the specific package from the DB
+            Package p = pkgDB.getPackage(pkgId);
+
+            // Check if valid and ready for assignment (Status 3=Arrived or 6=At Hub)
+            if (p.id != -1 && (p.status == 3 || p.status == 6))
             {
-                if (load + p.weight > 90.0)
-                    continue; // Bus Constraints
-                pkgDB.assignRider(p.id, targetRider.id);
-                load += p.weight;
+                // Assign the rider in the database and update status to OUT_FOR_DELIVERY (7)
+                pkgDB.assignRider(pkgId, riderId);
                 count++;
             }
         }
-        return "Assigned " + to_string(count) + " packages.";
+
+        if (count == 0)
+            return "No valid packages were assigned.";
+        return "Successfully assigned " + to_string(count) + " packages.";
     }
 
+    // 2. Rider Action Logic (Delivery/Failure)
     // 2. Rider Action Logic (Delivery/Failure)
     string riderAction(int pkgId, string action)
     {
@@ -390,7 +420,9 @@ public:
 
         if (action == "delivered")
         {
-            string newHist = p.historyStr + "|DELIVERED at " + getCurrentTime();
+            // FIX: Use ',' to start a NEW history entry. 
+            // Was: p.historyStr + "|DELIVERED..." which merged it into the previous city.
+            string newHist = p.historyStr + ",DELIVERED|" + getCurrentTime();
             pkgDB.updateStatusAndRoute(pkgId, DELIVERED, p.currentCity, newHist, "");
             return "Delivered";
         }
@@ -399,12 +431,15 @@ public:
             int attempts = p.attempts + 1;
             if (attempts >= 3)
             {
-                string newHist = p.historyStr + "|RETURNED (3 Failures)";
+                // FIX: Use ',' here too
+                string newHist = p.historyStr + ",RETURNED (3 Failures)|" + getCurrentTime();
                 pkgDB.updateAttempts(pkgId, attempts, FAILED); // Return to sender
                 return "Returned";
             }
             else
             {
+                // Note: We don't necessarily add history for a retry, 
+                // but you could add ",Attempt Failed|" if you wanted.
                 pkgDB.updateAttempts(pkgId, attempts, OUT_FOR_DELIVERY); // Keep trying
                 return "Attempt Recorded";
             }
