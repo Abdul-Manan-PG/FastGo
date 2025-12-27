@@ -171,6 +171,15 @@ nav {
     width: fit-content;
 }
 
+/* NEW: Waiting at Hub */
+.st-6 {
+    background: #8e44ad; /* Purple */
+}
+
+/* NEW: Out for Delivery (Rider) */
+.st-7 {
+    background: #d35400; /* Dark Orange */
+}
 .st-0 {
     background: #95a5a6;
 }
@@ -285,4 +294,45 @@ canvas {
 /* Optional: Add a hover effect */
 .route-list-container button:hover {
     background-color: #d35400;
+}
+
+
+/* Manager Toggle Switch */
+#mgr-toggle-container button {
+    background: #ecf0f1;
+    color: #7f8c8d;
+    border: 1px solid #bdc3c7;
+    transition: all 0.2s;
+    font-weight: bold;
+    margin: 0; /* Override default button margin */
+}
+
+#mgr-toggle-container button:hover {
+    background: #bdc3c7;
+    color: #2c3e50;
+}
+
+/* Courier / Rider List Items */
+#courier-list div {
+    background: #fdfdfd;
+    border: 1px solid #eee;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#courier-list b {
+    color: #2c3e50;
+    font-size: 13px;
+}
+
+/* Small assign button */
+#courier-list button {
+    width: auto;
+    padding: 4px 10px;
+    font-size: 11px;
+    margin-top: 0;
 }

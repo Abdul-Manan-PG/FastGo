@@ -36,7 +36,29 @@
 
         <div class="container">
             <div class="sidebar" id="sidebar-container">
-                
+                <div id="rider-tools" style="display:none;">
+                    <div class="card">
+                        <h4>🛵 My Deliveries</h4>
+                        <button onclick="loadRiderPackages()" class="blue-btn">Refresh</button>
+                        <div id="rider-pkg-list" class="route-list-container"></div>
+                    </div>
+                </div>
+                <div id="manager-courier-module" style="display:none;">
+                     <div class="card">
+                        <h4>👤 Create Rider</h4>
+                        <input type="text" id="rider-user" placeholder="Username">
+                        <input type="text" id="rider-pass" placeholder="Password">
+                        <select id="rider-veh">
+                            <option value="bike">Bike (Max 10, < 2kg)</option>
+                            <option value="bus">CarryBus (Max 90kg)</option>
+                        </select>
+                        <button onclick="createRider()" class="blue-btn">Add Rider</button>
+                    </div>
+                    <div class="card">
+                        <h4>📋 Assignment (At Hub)</h4>
+                        <div id="courier-list" class="route-list-container"></div>
+                    </div>
+                </div>
                 <div id="pkg-tracking-pane" class="card" style="display:none; border:2px solid #3498db;">
                     <h4>📦 Tracking Info</h4>
                     <p><b>ID:</b> #<span id="trk-id"></span></p>

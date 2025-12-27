@@ -34,6 +34,9 @@ private:
     SaveRoute routeDB;
     PackageDatabase pkgDB;
 
+    RiderDatabase riderDB; // Add this member
+    string currentRiderUser;
+
     // --- Helper: Get Current Time as String ---
     string getCurrentTime()
     {
@@ -69,19 +72,33 @@ public:
     // --- Authentication ---
     string login(string username, string password)
     {
+        // 1. Admin Check
         if (username == "admin" && password == "admin123")
         {
             currentRole = Admin;
             currentUserCity = "";
             return "Success: Admin Login";
         }
+
+        // 2. Manager Check
         string storedPass = cityHashTable.getPassword(username);
         if (storedPass != "-1" && storedPass == password)
         {
             currentRole = Manager;
-            currentUserCity = username; // Manager is tied to a specific city
+            currentUserCity = username;
             return "Success: Manager Login";
         }
+
+        // 3. Rider Check (NEW)
+        Rider r = riderDB.getRider(username);
+        if (r.id != -1 && r.password == password)
+        {
+            currentRole = Guest; // Treat Rider as Guest or add a RIDER role to Enum
+            currentRiderUser = username;
+            currentUserCity = r.city; // Rider operates in this city
+            return "Success: Rider Login";
+        }
+
         return "Error: Invalid Credentials";
     }
 
@@ -309,6 +326,126 @@ public:
 
     // Force save (useful after reset or bulk updates)
     void saveCitiesToDB() { cityDB.saveFromSimpleHash(cityHashTable); }
+
+    // 1. New Assignment Logic
+    string assignPackagesToRider(int riderId)
+    {
+        // Fetch Rider
+        vector<Rider> riders = riderDB.getRidersByCity(currentUserCity);
+        Rider targetRider = {-1};
+        for (auto &r : riders)
+            if (r.id == riderId)
+                targetRider = r;
+        if (targetRider.id == -1)
+            return "Error: Rider not found";
+
+        // Get Packages waiting at Hub
+        vector<Package> all = pkgDB.getAllPackages();
+        vector<Package> pool;
+        for (auto &p : all)
+        {
+            if (p.currentCity == currentUserCity && p.status == AT_HUB)
+            {
+                pool.push_back(p);
+            }
+        }
+
+        // Sort: Priority First (Type 1 < 2 < 3), then Weight
+        sort(pool.begin(), pool.end(), [](const Package &a, const Package &b)
+             {
+            if (a.type != b.type) return a.type < b.type;
+            return a.weight < b.weight; });
+
+        int count = 0;
+        double load = 0;
+        bool isBike = (targetRider.vehicle == "bike");
+
+        for (auto &p : pool)
+        {
+            if (isBike)
+            {
+                if (p.weight >= 2.0 || count >= 10)
+                    continue; // Bike Constraints
+                pkgDB.assignRider(p.id, targetRider.id);
+                count++;
+            }
+            else
+            {
+                if (load + p.weight > 90.0)
+                    continue; // Bus Constraints
+                pkgDB.assignRider(p.id, targetRider.id);
+                load += p.weight;
+                count++;
+            }
+        }
+        return "Assigned " + to_string(count) + " packages.";
+    }
+
+    // 2. Rider Action Logic (Delivery/Failure)
+    string riderAction(int pkgId, string action)
+    {
+        Package p = pkgDB.getPackage(pkgId);
+        if (p.id == -1)
+            return "Error";
+
+        if (action == "delivered")
+        {
+            string newHist = p.historyStr + "|DELIVERED at " + getCurrentTime();
+            pkgDB.updateStatusAndRoute(pkgId, DELIVERED, p.currentCity, newHist, "");
+            return "Delivered";
+        }
+        else if (action == "failed")
+        {
+            int attempts = p.attempts + 1;
+            if (attempts >= 3)
+            {
+                string newHist = p.historyStr + "|RETURNED (3 Failures)";
+                pkgDB.updateAttempts(pkgId, attempts, FAILED); // Return to sender
+                return "Returned";
+            }
+            else
+            {
+                pkgDB.updateAttempts(pkgId, attempts, OUT_FOR_DELIVERY); // Keep trying
+                return "Attempt Recorded";
+            }
+        }
+        return "Unknown";
+    }
+
+    // 3. Add Rider
+    void addRider(string u, string p, string v)
+    {
+        riderDB.addRider(u, p, v, currentUserCity);
+    }
+
+    // 1. Get all riders assigned to the current manager's city
+    vector<Rider> getRidersForManager()
+    {
+        // Uses the existing RiderDatabase method
+        return riderDB.getRidersByCity(currentUserCity);
+    }
+
+    // 2. Get packages assigned to the currently logged-in rider
+    vector<Package> getPackagesForLoggedRider()
+    {
+        // Identify the rider based on the logged-in username
+        Rider r = riderDB.getRider(currentRiderUser);
+        if (r.id == -1)
+            return {}; // Rider not found
+
+        vector<Package> all = pkgDB.getAllPackages();
+        vector<Package> assigned;
+
+        for (const auto &p : all)
+        {
+            // Filter: Must match Rider ID and be currently "Out for Delivery"
+            if (p.riderId == r.id && p.status == OUT_FOR_DELIVERY)
+            {
+                assigned.push_back(p);
+            }
+        }
+        return assigned;
+    }
 };
 
 #endif

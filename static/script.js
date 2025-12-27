@@ -45,6 +45,7 @@ async function login() {
 function loginAsGuest() { setupDashboard('guest', ''); }
 function logout() { location.reload(); }
 
+// 4. Update Dashboard Setup to handle 'rider' role
 function setupDashboard(role, city) {
     userRole = role; userCity = city || "";
     document.getElementById('login-screen').classList.remove('active');
@@ -52,21 +53,26 @@ function setupDashboard(role, city) {
     document.getElementById('role-display').innerText = `(${userRole})`;
     document.getElementById('city-display').innerText = userCity ? `@ ${userCity}` : "";
 
-    // Hide all sidebars
-    ['admin-tools', 'manager-tools', 'guest-tools', 'admin-controls'].forEach(id => {
+    // Hide all panels initially
+    ['admin-tools', 'manager-tools', 'manager-courier-module', 'guest-tools', 'rider-tools', 'admin-controls'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
 
-    // Show relevant sidebar
+    // Show specific panels based on role
     if (userRole === 'admin') {
         document.getElementById('admin-tools').style.display = 'block';
         document.getElementById('admin-controls').style.display = 'block';
         loadAdminPackages();
     } else if (userRole === 'manager') {
+        // Manager starts on the Package View
         document.getElementById('manager-tools').style.display = 'block';
+        // Add Toggle Buttons dynamically if not present
+        if(!document.getElementById('mgr-toggle-container')) addManagerToggles();
         loadManagerPackages();
-        setInterval(loadManagerPackages, 3000);
+    } else if (userRole === 'rider') {
+        document.getElementById('rider-tools').style.display = 'block';
+        loadRiderPackages();
     } else {
         document.getElementById('guest-tools').style.display = 'block';
     }
@@ -314,3 +320,124 @@ function showTab(name) { document.querySelectorAll('.tab-content').forEach(d => 
 async function handleMouseDown(e) { const mouseX = e.offsetX, mouseY = e.offsetY; for (let n of nodes) { const dx = mouseX - n.displayX, dy = mouseY - n.displayY; if (dx * dx + dy * dy < 400) { if (userRole === 'admin') { isDragging = true; draggedNode = n; } } } }
 function handleMouseMove(e) { if (!isDragging || !draggedNode || userRole !== 'admin') return; draggedNode.displayX = e.offsetX; draggedNode.displayY = e.offsetY; draggedNode.x = (draggedNode.displayX - transform.offsetX) / transform.scale + transform.minX; draggedNode.y = (draggedNode.displayY - transform.offsetY) / transform.scale + transform.minY; drawMap(); }
 function handleMouseUp() { if (isDragging && draggedNode && userRole === 'admin') { fetch(`${API_URL}/update_node`, { method: 'POST', body: JSON.stringify({ name: draggedNode.name, x: draggedNode.x, y: draggedNode.y }) }); } isDragging = false; draggedNode = null; }
+
+// [New Functions for Rider/Courier Logic]
+
+async function loadRidersAndAssignments() {
+    // Load Riders
+    const res = await fetch(`${API_URL}/get_riders`);
+    const riders = await res.json();
+    
+    // Load Packages at Hub (Status 6)
+    const res2 = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
+    const allPkgs = await res2.json();
+    const hubPkgs = allPkgs.filter(p => p.status === 6); // 6 = AT_HUB
+
+    let html = `<div style="font-size:11px; margin-bottom:5px;">Waiting at Hub: ${hubPkgs.length}</div>`;
+    riders.forEach(r => {
+        html += `
+            <div style="background:#f9f9f9; padding:8px; border-bottom:1px solid #ddd;">
+                <b>${r.username}</b> (${r.vehicle})
+                <button class="blue-btn" style="float:right; width:auto; padding:2px 8px;" 
+                   onclick="assignPackages(${r.id})">Assign</button>
+            </div>`;
+    });
+    document.getElementById('courier-list').innerHTML = html;
+}
+
+async function assignPackages(riderId) {
+    const res = await fetch(`${API_URL}/assign_packages`, { method: 'POST', body: JSON.stringify({ riderId }) });
+    const data = await res.json();
+    alert(data.message);
+    loadRidersAndAssignments();
+}
+
+async function riderAction(id, action) {
+    await fetch(`${API_URL}/rider_action`, { method: 'POST', body: JSON.stringify({ id, action }) });
+    loadRiderPackages();
+}
+
+
+// --- MISSING FUNCTIONS & FIXES ---
+
+// 1. Switch between Package View and Courier View (Fixing ID mismatch)
+function switchModule(mod) {
+    if (mod === 'pkg') {
+        document.getElementById('manager-tools').style.display = 'block';
+        document.getElementById('manager-courier-module').style.display = 'none';
+        loadManagerPackages();
+    } else {
+        document.getElementById('manager-tools').style.display = 'none';
+        document.getElementById('manager-courier-module').style.display = 'block';
+        loadRidersAndAssignments();
+    }
+}
+
+// 2. Create a new Rider (Connects to /api/add_rider)
+async function createRider() {
+    const u = document.getElementById('rider-user').value;
+    const p = document.getElementById('rider-pass').value;
+    const v = document.getElementById('rider-veh').value;
+    
+    if(!u || !p) { alert("Please enter username and password"); return; }
+
+    const res = await fetch(`${API_URL}/add_rider`, {
+        method: 'POST',
+        body: JSON.stringify({ username: u, password: p, vehicle: v })
+    });
+    
+    if(res.ok) {
+        alert("Rider Added Successfully");
+        document.getElementById('rider-user').value = "";
+        document.getElementById('rider-pass').value = "";
+        loadRidersAndAssignments();
+    } else {
+        alert("Error adding rider");
+    }
+}
+
+// 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
+async function loadRiderPackages() {
+    const res = await fetch(`${API_URL}/rider_packages`);
+    const pkgs = await res.json();
+    const list = document.getElementById('rider-pkg-list');
+    
+    if(pkgs.length === 0) {
+        list.innerHTML = "<div style='padding:10px; color:#777;'>No active deliveries</div>";
+        return;
+    }
+
+    list.innerHTML = pkgs.map(p => `
+        <div class="pkg-item" style="border-left: 4px solid #3498db;">
+            <div style="font-size:14px; font-weight:bold;">#${p.id} - ${p.receiver}</div>
+            <div style="font-size:12px; margin-bottom:5px;">📍 ${p.address}</div>
+            <div style="display:flex; gap:5px;">
+                <button onclick="riderAction(${p.id}, 'delivered')" 
+                    style="background:#27ae60; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
+                    ✅ Delivered
+                </button>
+                <button onclick="riderAction(${p.id}, 'failed')" 
+                    style="background:#c0392b; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
+                    ❌ Failed
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Helper to inject toggle buttons for Manager
+function addManagerToggles() {
+    const container = document.getElementById('sidebar-container');
+    const toggleDiv = document.createElement('div');
+    toggleDiv.id = "mgr-toggle-container";
+    toggleDiv.className = "card";
+    toggleDiv.style.background = "#ecf0f1";
+    toggleDiv.innerHTML = `
+        <div style="display:flex; gap:5px;">
+            <button onclick="switchModule('pkg')" style="flex:1; padding:8px; cursor:pointer;">📦 Packages</button>
+            <button onclick="switchModule('courier')" style="flex:1; padding:8px; cursor:pointer;">🛵 Riders</button>
+        </div>
+    `;
+    // Insert at the top of the sidebar
+    container.insertBefore(toggleDiv, container.firstChild);
+}
