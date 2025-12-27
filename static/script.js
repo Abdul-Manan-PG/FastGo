@@ -165,16 +165,39 @@ function drawMap() {
         const n2 = nodes.find(n => n.id === e.target);
         if (!n1 || !n2) return;
 
+        // Draw the line (Existing code)
         ctx.beginPath();
         ctx.moveTo(n1.displayX, n1.displayY);
         ctx.lineTo(n2.displayX, n2.displayY);
 
-        // Faded style if tracking is active
         if (e.blocked) ctx.strokeStyle = '#e74c3c';
         else if (trackingActive) ctx.strokeStyle = '#ecf0f1';
         else ctx.strokeStyle = '#95a5a6';
 
         ctx.lineWidth = 2; ctx.stroke();
+
+        // --- NEW CODE STARTS HERE: Draw Distance Text ---
+        // Only show distance if we aren't in "tracking mode" (to keep it clean)
+        // or you can remove the condition to always show it.
+        if (!trackingActive) {
+            const midX = (n1.displayX + n2.displayX) / 2;
+            const midY = (n1.displayY + n2.displayY) / 2;
+            const distText = e.weight + " km";
+
+            // Optional: Draw a small white background for readability
+            ctx.font = "bold 11px Arial";
+            const textWidth = ctx.measureText(distText).width;
+            
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.fillRect(midX - textWidth / 2 - 2, midY - 6, textWidth + 4, 12);
+
+            // Draw the text
+            ctx.fillStyle = "#555"; // Dark grey color
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(distText, midX, midY);
+        }
+        // --- NEW CODE ENDS HERE ---
     });
 
     // 2. Draw Tracking Routes

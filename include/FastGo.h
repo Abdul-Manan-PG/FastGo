@@ -176,6 +176,11 @@ public:
                     pkgDB.updateStatusAndRoute(p.id, newStatus, nextCity, newHist, newRoute);
                     logs.push_back("Pkg #" + to_string(p.id) + " moved to " + nextCity);
                 }
+            } else {
+                // *** FIX ADDED HERE ***
+                // If the package did not move, save the incremented ticks to the DB.
+                // Otherwise, the counter resets to 0 on the next reload, and it never moves.
+                pkgDB.updateTicks(p.id, p.ticks);
             }
         }
         return logs;
