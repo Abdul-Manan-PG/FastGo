@@ -339,11 +339,11 @@ async function loadManagerPackages() {
     document.getElementById('tab-incoming').innerHTML = pkgs.filter(p => (p.status === 3 || p.status === 5) && p.current === userCity)
         .map(p => {
             let actionBtn = '';
-            if(p.status === 3) {
-                 actionBtn = `<div style="font-size:11px; color:#e67e22;">⬇ Arrived (Go to Riders)</div>`;
+            if (p.status === 3) {
+                actionBtn = `<div style="font-size:11px; color:#e67e22;">⬇ Arrived (Go to Riders)</div>`;
             } else if (p.status === 5) {
-                 // FAILED STATUS -> Show Return Button
-                 actionBtn = `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')" style="background:#c0392b;">↩ Return to Sender</button>`;
+                // FAILED STATUS -> Show Return Button
+                actionBtn = `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')" style="background:#c0392b;">↩ Return to Sender</button>`;
             }
             return render(p, actionBtn);
         }).join('');
@@ -366,7 +366,7 @@ async function loadAdminStats() {
     if (userRole !== 'admin') return;
     const res = await fetch(`${API_URL}/admin_stats`);
     const stats = await res.json();
-    
+
     // Inject into HTML (Make sure elements exist, see step 5)
     document.getElementById('stat-revenue').innerText = "$" + stats.revenue.toFixed(2);
     document.getElementById('stat-delivered').innerText = stats.delivered;
@@ -379,8 +379,8 @@ async function createPackage() {
     const sender = document.getElementById('pkg-sender').value;
     const weight = parseFloat(document.getElementById('pkg-weight').value);
     const type = parseInt(document.getElementById('pkg-type').value);
-    
-    if(!weight || !sender) { alert("Please fill details"); return; }
+
+    if (!weight || !sender) { alert("Please fill details"); return; }
 
     // --- CLIENT SIDE PRICE ESTIMATION ---
     let base = 10;
@@ -390,19 +390,19 @@ async function createPackage() {
 
     // --- CONFIRMATION MODAL ---
     const confirmed = confirm(`Estimated Price: $${estimatedPrice.toFixed(2)}\n\nDo you want to create this package?`);
-    if(!confirmed) return;
+    if (!confirmed) return;
 
-    const body = { 
-        sender: sender, 
-        receiver: document.getElementById('pkg-receiver').value, 
-        address: document.getElementById('pkg-addr').value, 
-        dest: document.getElementById('pkg-dest').value, 
-        type: type, 
-        weight: weight 
-    }; 
-    
-    await fetch(`${API_URL}/add_package`, { method: 'POST', body: JSON.stringify(body) }); 
-    loadManagerPackages(); 
+    const body = {
+        sender: sender,
+        receiver: document.getElementById('pkg-receiver').value,
+        address: document.getElementById('pkg-addr').value,
+        dest: document.getElementById('pkg-dest').value,
+        type: type,
+        weight: weight
+    };
+
+    await fetch(`${API_URL}/add_package`, { method: 'POST', body: JSON.stringify(body) });
+    loadManagerPackages();
 }
 
 async function updatePkg(id, action) { await fetch(`${API_URL}/update_pkg_status`, { method: 'POST', body: JSON.stringify({ id, action }) }); loadManagerPackages(); }
@@ -431,12 +431,12 @@ async function loadRidersAndAssignments() {
     const allPkgs = await res2.json();
 
     // UPDATED: Look for Status 3 (Arrived) OR 6 (At Hub) so they appear in the list
-    const hubPkgs = allPkgs.filter(p => p.status === 3 || p.status === 6); 
+    const hubPkgs = allPkgs.filter(p => p.status === 3 || p.status === 6);
 
     let html = `<div style="font-size:11px; margin-bottom:5px;">Waiting for Assignment: ${hubPkgs.length}</div>`;
-    
+
     // Only show riders if we have them
-    if(riders.length === 0) {
+    if (riders.length === 0) {
         html += `<div style="padding:10px; color:#777; font-size:12px;">No Riders Found</div>`;
     }
 
@@ -455,7 +455,7 @@ async function assignPackages(riderId) {
     // 1. Find the packages that need assignment (Status 3 or 6)
     const resPkgs = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
     const allPkgs = await resPkgs.json();
-    
+
     // Filter for packages that are 'Arrived' (3) or 'At Hub' (6)
     const packagesToAssign = allPkgs.filter(p => p.status === 3 || p.status === 6);
 
@@ -470,18 +470,18 @@ async function assignPackages(riderId) {
     console.log(`Assigning packages ${packageIds.join(',')} to Rider ${riderId}`);
 
     // 3. Send Rider ID AND Package IDs to the backend
-    const res = await fetch(`${API_URL}/assign_packages`, { 
-        method: 'POST', 
+    const res = await fetch(`${API_URL}/assign_packages`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            riderId: riderId, 
+        body: JSON.stringify({
+            riderId: riderId,
             packageIds: packageIds // sending the specific list
-        }) 
+        })
     });
 
     const data = await res.json();
     alert(data.message);
-    
+
     // 4. Refresh the view
     loadRidersAndAssignments();
 }
@@ -544,8 +544,8 @@ async function loadRiderPackages() {
 
     list.innerHTML = pkgs.map(p => {
         // Warning for previous failed attempts
-        const attemptWarn = p.attempts > 0 
-            ? `<span style="color:#c0392b; font-size:11px; margin-left:5px;">(Attempt ${p.attempts + 1}/3)</span>` 
+        const attemptWarn = p.attempts > 0
+            ? `<span style="color:#c0392b; font-size:11px; margin-left:5px;">(Attempt ${p.attempts + 1}/3)</span>`
             : '';
 
         return `
