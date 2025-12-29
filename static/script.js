@@ -419,6 +419,28 @@ function drawMap() {
             ctx.textBaseline = "middle";
             ctx.fillText(n.name, n.displayX, labelY + labelHeight / 2);
         }
+        // ================== DRAW FUTURE ROUTE ON TOP ==================
+        if (trackingActive && trackData?.future?.length) {
+            ctx.save();
+
+            ctx.lineWidth = 5;
+            ctx.setLineDash([14, 10]);
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#2563eb'; // darker blue
+
+            for (let i = 0; i < trackData.future.length - 1; i++) {
+                const n1 = nodes.find(n => n.name === trackData.future[i]);
+                const n2 = nodes.find(n => n.name === trackData.future[i + 1]);
+                if (!n1 || !n2) continue;
+
+                ctx.beginPath();
+                ctx.moveTo(n1.displayX, n1.displayY);
+                ctx.lineTo(n2.displayX, n2.displayY);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
     });
 }
 
@@ -580,7 +602,7 @@ function renderRouteManager() {
 
 function getStatusName(s) {
     const names = ["Created", "Loaded", "In Transit", "Arrived", "Delivered", "Failed"];
-    return names[s] || "?";
+    return names[s] || "Assigned";
 }
 
 function showTab(name) {
