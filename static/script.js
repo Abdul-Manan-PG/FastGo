@@ -13,11 +13,11 @@ let transform = { scale: 1, minX: 0, minY: 0, offsetX: 0, offsetY: 0 };
 
 // TRACKING STATE
 let trackingActive = false;
-let trackData = null; // { history: [{city, time}], future: [city, city] }
+let trackData = null;
 
-// NEW: Stacks for History Navigation
-let historyStack = []; // Stores the currently visible path
-let futureStack = [];  // Stores the points we moved back from
+// History Navigation
+let historyStack = [];
+let futureStack = [];
 
 window.onload = () => {
     canvas = document.getElementById('mapCanvas');
@@ -49,30 +49,25 @@ async function login() {
 function loginAsGuest() { setupDashboard('guest', ''); }
 function logout() { location.reload(); }
 
-// 4. Update Dashboard Setup to handle 'rider' role
 function setupDashboard(role, city) {
     userRole = role; userCity = city || "";
     document.getElementById('login-screen').classList.remove('active');
     document.getElementById('dashboard-screen').classList.add('active');
-    document.getElementById('role-display').innerText = `(${userRole})`;
-    document.getElementById('city-display').innerText = userCity ? `@ ${userCity}` : "";
+    document.getElementById('role-display').innerText = role;
+    document.getElementById('city-display').innerText = userCity ? userCity : "";
 
-    // Hide all panels initially
     ['admin-tools', 'manager-tools', 'manager-courier-module', 'guest-tools', 'rider-tools', 'admin-controls'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
 
-    // Show specific panels based on role
     if (userRole === 'admin') {
         document.getElementById('admin-tools').style.display = 'block';
         document.getElementById('admin-controls').style.display = 'block';
         loadAdminPackages();
-        loadAdminStats(); // <--- ADD THIS
+        loadAdminStats();
     } else if (userRole === 'manager') {
-        // Manager starts on the Package View
         document.getElementById('manager-tools').style.display = 'block';
-        // Add Toggle Buttons dynamically if not present
         if (!document.getElementById('mgr-toggle-container')) addManagerToggles();
         loadManagerPackages();
     } else if (userRole === 'rider') {
@@ -91,7 +86,6 @@ async function trackPackageByID() {
     startTracking(id);
 }
 
-// Main function to visualize a package
 async function startTracking(id) {
     const res = await fetch(`${API_URL}/track_package?id=${id}`);
     const data = await res.json();
@@ -101,21 +95,15 @@ async function startTracking(id) {
     trackData = data;
     trackingActive = true;
 
-    // --- NEW: Initialize Stacks ---
-    // Deep copy the history array into our Stack
     historyStack = [...data.history];
     futureStack = [];
-    // ------------------------------
 
-    // Show tracking pane
     document.getElementById('pkg-tracking-pane').style.display = 'block';
 
-    // Hide toolbars logic... (Keep existing code)
     if (userRole === 'manager') document.getElementById('manager-tools').style.display = 'none';
     if (userRole === 'admin') document.getElementById('admin-tools').style.display = 'none';
     if (userRole !== 'guest') document.getElementById('close-tracking-btn').style.display = 'block';
 
-    // Populate Tracking Pane logic... (Keep existing code)
     document.getElementById('trk-id').innerText = data.id;
     document.getElementById('trk-to').innerText = data.sender;
     document.getElementById('trk-from').innerText = data.receiver;
@@ -123,50 +111,42 @@ async function startTracking(id) {
     document.getElementById('trk-status').innerText = getStatusName(data.status);
     document.getElementById('trk-status').className = `status-badge st-${data.status}`;
 
-    // Initial Render
     updateTrackingUI();
     drawMap();
 }
 
-// --- NEW TRACKING NAVIGATION FUNCTIONS ---
-
 function trackPrev() {
-    // We need at least one item to remain (the start point)
     if (historyStack.length > 1) {
-        const point = historyStack.pop(); // Remove from History (LIFO)
-        futureStack.push(point);          // Add to Future Stack
+        const point = historyStack.pop();
+        futureStack.push(point);
         updateTrackingUI();
         drawMap();
     }
 }
 
 function trackNext() {
-    // If there is anything in the Future stack to "redo"
     if (futureStack.length > 0) {
-        const point = futureStack.pop();  // Remove from Future (LIFO)
-        historyStack.push(point);         // Add back to History
+        const point = futureStack.pop();
+        historyStack.push(point);
         updateTrackingUI();
         drawMap();
     }
 }
 
 function updateTrackingUI() {
-    // Update the "Current View" text based on the top of the History Stack
     const currentPoint = historyStack[historyStack.length - 1];
     if (currentPoint) {
         document.getElementById('trk-current').innerText = currentPoint.city;
     }
 
-    // Update History List based on Stack
     const histDiv = document.getElementById('trk-history-list');
     histDiv.innerHTML = historyStack.map(h =>
-        `<div>✅ ${h.city} <span style="color:#777; font-size:10px;">${h.time.split(' ')[1] || ''}</span></div>`
+        `<div>✅ ${h.city} <span style="color:#6b7280; font-size:10px;">${h.time.split(' ')[1] || ''}</span></div>`
     ).join('');
 
-    // Future list remains static (the originally planned route)
     const futDiv = document.getElementById('trk-future-list');
     if (trackData.future && trackData.future.length > 0) {
-        futDiv.innerHTML = trackData.future.map(c => `<div>🔹 ${c}</div>`).join('');
+        futDiv.innerHTML = trackData.future.map(c => `<div>📍 ${c}</div>`).join('');
     } else {
         futDiv.innerHTML = "<div>🏁 Arrived / No Plan</div>";
     }
@@ -177,7 +157,6 @@ function closeTracking() {
     trackData = null;
     document.getElementById('pkg-tracking-pane').style.display = 'none';
 
-    // Restore Sidebars
     if (userRole === 'manager') document.getElementById('manager-tools').style.display = 'block';
     if (userRole === 'admin') document.getElementById('admin-tools').style.display = 'block';
 
@@ -199,7 +178,7 @@ function fitMapToScreen() {
     if (nodes.length === 0) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     nodes.forEach(n => { if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x; if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y; });
-    const padding = 50, mapW = maxX - minX || 1, mapH = maxY - minY || 1;
+    const padding = 60, mapW = maxX - minX || 1, mapH = maxY - minY || 1;
     const cw = canvas.width - (padding * 2), ch = canvas.height - (padding * 2);
     const s = Math.min(cw / mapW, ch / mapH);
     transform = { scale: s, minX, minY, offsetX: padding + (cw - mapW * s) / 2, offsetY: padding + (ch - mapH * s) / 2 };
@@ -210,119 +189,254 @@ function drawMap() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (!isDragging) fitMapToScreen();
 
-    // 1. Draw Edges
+    // Draw Edges with Enhanced Styling
     edges.forEach(e => {
         const n1 = nodes.find(n => n.id === e.source);
         const n2 = nodes.find(n => n.id === e.target);
         if (!n1 || !n2) return;
 
-        // Draw the line (Existing code)
         ctx.beginPath();
         ctx.moveTo(n1.displayX, n1.displayY);
         ctx.lineTo(n2.displayX, n2.displayY);
 
-        if (e.blocked) ctx.strokeStyle = '#e74c3c';
-        else if (trackingActive) ctx.strokeStyle = '#ecf0f1';
-        else ctx.strokeStyle = '#95a5a6';
+        if (e.blocked) {
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([8, 8]);
+        } else if (trackingActive) {
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+        } else {
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([]);
+        }
 
-        ctx.lineWidth = 2; ctx.stroke();
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.setLineDash([]);
 
-        // --- NEW CODE STARTS HERE: Draw Distance Text ---
-        // Only show distance if we aren't in "tracking mode" (to keep it clean)
-        // or you can remove the condition to always show it.
+        // Draw distance labels with improved styling
         if (!trackingActive) {
             const midX = (n1.displayX + n2.displayX) / 2;
             const midY = (n1.displayY + n2.displayY) / 2;
             const distText = e.weight + " km";
 
-            // Optional: Draw a small white background for readability
-            ctx.font = "bold 11px Arial";
+            // Background pill
+            ctx.font = "bold 12px Inter";
             const textWidth = ctx.measureText(distText).width;
+            const padding = 8;
 
-            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-            ctx.fillRect(midX - textWidth / 2 - 2, midY - 6, textWidth + 4, 12);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.1)";
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
 
-            // Draw the text
-            ctx.fillStyle = "#555"; // Dark grey color
+            const rectX = midX - textWidth / 2 - padding;
+            const rectY = midY - 8;
+            const rectWidth = textWidth + padding * 2;
+            const rectHeight = 16;
+            const radius = 8;
+
+            ctx.beginPath();
+            ctx.moveTo(rectX + radius, rectY);
+            ctx.lineTo(rectX + rectWidth - radius, rectY);
+            ctx.quadraticCurveTo(rectX + rectWidth, rectY, rectX + rectWidth, rectY + radius);
+            ctx.lineTo(rectX + rectWidth, rectY + rectHeight - radius);
+            ctx.quadraticCurveTo(rectX + rectWidth, rectY + rectHeight, rectX + rectWidth - radius, rectY + rectHeight);
+            ctx.lineTo(rectX + radius, rectY + rectHeight);
+            ctx.quadraticCurveTo(rectX, rectY + rectHeight, rectX, rectY + rectHeight - radius);
+            ctx.lineTo(rectX, rectY + radius);
+            ctx.quadraticCurveTo(rectX, rectY, rectX + radius, rectY);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Text
+            ctx.fillStyle = "#475569";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(distText, midX, midY);
         }
-        // --- NEW CODE ENDS HERE ---
     });
 
-    // 2. Draw Tracking Routes
+    // Draw Tracking Routes with Enhanced Styling
     if (trackingActive && trackData) {
-
-        // A. HISTORY (Solid Green)
+        // History Route (Green Gradient)
         if (historyStack.length > 1) {
-            ctx.beginPath(); ctx.lineWidth = 4; ctx.strokeStyle = '#27ae60'; ctx.lineCap = 'round';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
             for (let i = 0; i < historyStack.length - 1; i++) {
                 const n1 = nodes.find(n => n.name === historyStack[i].city);
                 const n2 = nodes.find(n => n.name === historyStack[i + 1].city);
-                if (n1 && n2) { ctx.moveTo(n1.displayX, n1.displayY); ctx.lineTo(n2.displayX, n2.displayY); }
+                if (n1 && n2) {
+                    const gradient = ctx.createLinearGradient(n1.displayX, n1.displayY, n2.displayX, n2.displayY);
+                    gradient.addColorStop(0, '#10b981');
+                    gradient.addColorStop(1, '#059669');
+
+                    ctx.strokeStyle = gradient;
+                    ctx.shadowColor = "rgba(16, 185, 129, 0.3)";
+                    ctx.shadowBlur = 8;
+
+                    ctx.beginPath();
+                    ctx.moveTo(n1.displayX, n1.displayY);
+                    ctx.lineTo(n2.displayX, n2.displayY);
+                    ctx.stroke();
+
+                    ctx.shadowColor = "transparent";
+                    ctx.shadowBlur = 0;
+                }
             }
-            ctx.stroke();
         }
 
-        // B. FUTURE (Dashed Blue)
-        // Connect Current -> Future[0] -> Future[1]...
+        // Future Route (Dashed Blue)
         if (trackData.future && trackData.future.length > 0) {
-            ctx.beginPath(); ctx.lineWidth = 3; ctx.strokeStyle = '#3498db'; ctx.setLineDash([10, 10]);
+            ctx.lineWidth = 4;
+            ctx.setLineDash([12, 8]);
+            ctx.lineCap = 'round';
 
-            // Link current to first planned
             const curr = nodes.find(n => n.name === trackData.current);
             const firstFut = nodes.find(n => n.name === trackData.future[0]);
-            if (curr && firstFut) { ctx.moveTo(curr.displayX, curr.displayY); ctx.lineTo(firstFut.displayX, firstFut.displayY); }
+            if (curr && firstFut) {
+                const gradient = ctx.createLinearGradient(curr.displayX, curr.displayY, firstFut.displayX, firstFut.displayY);
+                gradient.addColorStop(0, '#3b82f6');
+                gradient.addColorStop(1, '#2563eb');
+                ctx.strokeStyle = gradient;
+                ctx.beginPath();
+                ctx.moveTo(curr.displayX, curr.displayY);
+                ctx.lineTo(firstFut.displayX, firstFut.displayY);
+                ctx.stroke();
+            }
 
-            // Link rest
             for (let i = 0; i < trackData.future.length - 1; i++) {
                 const n1 = nodes.find(n => n.name === trackData.future[i]);
                 const n2 = nodes.find(n => n.name === trackData.future[i + 1]);
-                if (n1 && n2) { ctx.moveTo(n1.displayX, n1.displayY); ctx.lineTo(n2.displayX, n2.displayY); }
+                if (n1 && n2) {
+                    ctx.beginPath();
+                    ctx.moveTo(n1.displayX, n1.displayY);
+                    ctx.lineTo(n2.displayX, n2.displayY);
+                    ctx.stroke();
+                }
             }
-            ctx.stroke(); ctx.setLineDash([]);
+            ctx.setLineDash([]);
         }
     }
 
-    // 3. Draw Nodes
-    // 3. Draw Nodes
-
-    // --- FIX STARTS HERE ---
+    // Draw Nodes with Enhanced Styling
     let currentVisCity = null;
-    // Only calculate this if we are actively tracking and have history
     if (trackingActive && historyStack.length > 0) {
         currentVisCity = historyStack[historyStack.length - 1].city;
     }
-    // --- FIX ENDS HERE ---
 
     nodes.forEach(n => {
-        let color = '#3498db'; // Default Blue
-        let radius = 18;
+        let color = '#6366f1';
+        let radius = 20;
+        let glowColor = 'rgba(99, 102, 241, 0.3)';
 
         if (trackingActive) {
-            // Check History Stack
-            if (historyStack.some(h => h.city === n.name)) color = '#27ae60';
-            // Check Current Stack Top
-            if (n.name === currentVisCity) { color = '#e67e22'; radius = 22; }
+            if (historyStack.some(h => h.city === n.name)) {
+                color = '#10b981';
+                glowColor = 'rgba(16, 185, 129, 0.3)';
+            }
+            if (n.name === currentVisCity) {
+                color = '#f97316';
+                radius = 26;
+                glowColor = 'rgba(249, 115, 22, 0.4)';
+            }
         }
 
-        ctx.beginPath(); ctx.arc(n.displayX, n.displayY, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = color; ctx.fill();
-        ctx.strokeStyle = 'white'; ctx.lineWidth = 3; ctx.stroke();
+        // Glow effect
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 20;
 
-        // Label logic
+        // Outer ring
+        ctx.beginPath();
+        ctx.arc(n.displayX, n.displayY, radius + 3, 0, 2 * Math.PI);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fill();
+
+        // Main circle with gradient
+        const gradient = ctx.createRadialGradient(n.displayX, n.displayY - radius / 3, 0, n.displayX, n.displayY, radius);
+        const lightColor = adjustBrightness(color, 20);
+        gradient.addColorStop(0, lightColor);
+        gradient.addColorStop(1, color);
+
+        ctx.beginPath();
+        ctx.arc(n.displayX, n.displayY, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+
+        // Border
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Label with improved styling
         if (!trackingActive || color !== '#ecf0f1') {
-            ctx.fillStyle = "#2c3e50"; ctx.font = "bold 13px Segoe UI";
-            ctx.textAlign = "center"; ctx.textBaseline = "top";
-            ctx.fillText(n.name, n.displayX, n.displayY + radius + 6);
+            // Label background
+            ctx.font = "bold 14px Inter";
+            const textWidth = ctx.measureText(n.name).width;
+            const labelPadding = 8;
+
+            ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.1)";
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
+
+            const labelY = n.displayY + radius + 12;
+            const labelHeight = 22;
+            const labelRadius = 6;
+
+            ctx.beginPath();
+            ctx.moveTo(n.displayX - textWidth / 2 - labelPadding + labelRadius, labelY);
+            ctx.lineTo(n.displayX + textWidth / 2 + labelPadding - labelRadius, labelY);
+            ctx.quadraticCurveTo(n.displayX + textWidth / 2 + labelPadding, labelY, n.displayX + textWidth / 2 + labelPadding, labelY + labelRadius);
+            ctx.lineTo(n.displayX + textWidth / 2 + labelPadding, labelY + labelHeight - labelRadius);
+            ctx.quadraticCurveTo(n.displayX + textWidth / 2 + labelPadding, labelY + labelHeight, n.displayX + textWidth / 2 + labelPadding - labelRadius, labelY + labelHeight);
+            ctx.lineTo(n.displayX - textWidth / 2 - labelPadding + labelRadius, labelY + labelHeight);
+            ctx.quadraticCurveTo(n.displayX - textWidth / 2 - labelPadding, labelY + labelHeight, n.displayX - textWidth / 2 - labelPadding, labelY + labelHeight - labelRadius);
+            ctx.lineTo(n.displayX - textWidth / 2 - labelPadding, labelY + labelRadius);
+            ctx.quadraticCurveTo(n.displayX - textWidth / 2 - labelPadding, labelY, n.displayX - textWidth / 2 - labelPadding + labelRadius, labelY);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.shadowColor = "transparent";
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+
+            // Label text
+            ctx.fillStyle = "#1f2937";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(n.name, n.displayX, labelY + labelHeight / 2);
         }
     });
 }
 
+// Helper function to adjust color brightness
+function adjustBrightness(hex, percent) {
+    const num = parseInt(hex.replace("#", ""), 16);
+    const amt = Math.round(2.55 * percent);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    return "#" + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+        (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+        (B < 255 ? B < 1 ? 0 : B : 255))
+        .toString(16).slice(1);
+}
+
 // --- DATA FETCHERS ---
 
-// 2. Manager Packages (With 'Return' button for Failed items)
 async function loadManagerPackages() {
     if (userRole !== 'manager') return;
     const res = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
@@ -330,23 +444,24 @@ async function loadManagerPackages() {
 
     const render = (p, btn = '') => `
         <div class="pkg-item" onclick="startTracking(${p.id})">
-            <b>#${p.id}</b> -> ${p.dest} <span class="status-badge st-${p.status}">${getStatusName(p.status)}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <b style="font-size:14px;">#${p.id}</b>
+                <span class="status-badge st-${p.status}">${getStatusName(p.status)}</span>
+            </div>
+            <div style="font-size:12px; color:#6b7280; margin-bottom:4px;">📍 ${p.dest}</div>
             ${btn}
         </div>`;
 
-    // Outgoing
     document.getElementById('tab-outgoing').innerHTML = pkgs.filter(p => p.status <= 1 && p.current === userCity)
-        .map(p => render(p, p.status === 0 ? `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'load')">Load</button>` : '')).join('');
+        .map(p => render(p, p.status === 0 ? `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'load')" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">📦 Load</button>` : '')).join('');
 
-    // Incoming: Show Arrived (3) AND Failed (5) packages here
     document.getElementById('tab-incoming').innerHTML = pkgs.filter(p => (p.status === 3 || p.status === 5) && p.current === userCity)
         .map(p => {
             let actionBtn = '';
             if (p.status === 3) {
-                actionBtn = `<div style="font-size:11px; color:#e67e22;">⬇ Arrived (Go to Riders)</div>`;
+                actionBtn = `<div style="font-size:11px; color:#f97316; font-weight:600; margin-top:8px;">⬇ Arrived (Assign to Riders)</div>`;
             } else if (p.status === 5) {
-                // FAILED STATUS -> Show Return Button
-                actionBtn = `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')" style="background:#c0392b;">↩ Return to Sender</button>`;
+                actionBtn = `<button onclick="event.stopPropagation(); updatePkg(${p.id}, 'return')" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">↩ Return</button>`;
             }
             return render(p, actionBtn);
         }).join('');
@@ -360,17 +475,21 @@ async function loadAdminPackages() {
     const pkgs = await res.json();
     document.getElementById('admin-pkg-list').innerHTML = pkgs.map(p => `
         <div class="pkg-item" onclick="startTracking(${p.id})">
-            <b>#${p.id}</b> ${p.current} -> ${p.dest} <span class="status-badge st-${p.status}">${getStatusName(p.status)}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <b style="font-size:14px;">#${p.id}</b>
+                    <div style="font-size:12px; color:#6b7280; margin-top:4px;">${p.current} → ${p.dest}</div>
+                </div>
+                <span class="status-badge st-${p.status}">${getStatusName(p.status)}</span>
+            </div>
         </div>`).join('');
 }
 
-// 3. Admin Stats Loader
 async function loadAdminStats() {
     if (userRole !== 'admin') return;
     const res = await fetch(`${API_URL}/admin_stats`);
     const stats = await res.json();
 
-    // Inject into HTML (Make sure elements exist, see step 5)
     document.getElementById('stat-revenue').innerText = "$" + stats.revenue.toFixed(2);
     document.getElementById('stat-delivered').innerText = stats.delivered;
     document.getElementById('stat-transit').innerText = stats.inTransit;
@@ -385,13 +504,11 @@ async function createPackage() {
 
     if (!weight || !sender) { alert("Please fill details"); return; }
 
-    // --- CLIENT SIDE PRICE ESTIMATION ---
     let base = 5;
     let weightCost = weight * 1.1;
     let priorityCost = (type === 1) ? 20 : (type === 2 ? 5 : 0);
     let estimatedPrice = base + weightCost + priorityCost;
 
-    // --- CONFIRMATION MODAL ---
     const confirmed = confirm(`Estimated Price: $${estimatedPrice.toFixed(2)}\n\nDo you want to create this package?`);
     if (!confirmed) return;
 
@@ -437,6 +554,7 @@ async function toggleBlock(key, b) {
     });
     loadMap();
 }
+
 async function nextShift() {
     const res = await fetch(`${API_URL}/next_shift`, {
         method: 'POST'
@@ -450,10 +568,16 @@ function renderRouteManager() {
     list.innerHTML = "";
     edges.forEach(e => {
         const n1 = nodes.find(n => n.id === e.source), n2 = nodes.find(n => n.id === e.target);
-        if (n1 && n2) list.innerHTML += `<div>${n1.name}-${n2.name} 
-        <button onclick="toggleBlock('${n1.name}-${n2.name}',${!e.blocked})">${e.blocked ? 'Unblock' : 'Block'}</button></div>`;
+        if (n1 && n2) list.innerHTML += `<div>
+            <span style="font-weight:600;">${n1.name}-${n2.name}</span>
+            <button onclick="toggleBlock('${n1.name}-${n2.name}',${!e.blocked})" 
+                style="background: ${e.blocked ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'};">
+                ${e.blocked ? '✓ Unblock' : '🚫 Block'}
+            </button>
+        </div>`;
     });
 }
+
 function getStatusName(s) {
     const names = ["Created", "Loaded", "In Transit", "Arrived", "Delivered", "Failed"];
     return names[s] || "?";
@@ -463,12 +587,14 @@ function showTab(name) {
     document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(`tab-${name}`).classList.add('active');
+    event.target.classList.add('active');
 }
 
 async function handleMouseDown(e) {
-    const mouseX = e.offsetX, mouseY = e.offsetY; for (let n of nodes) {
+    const mouseX = e.offsetX, mouseY = e.offsetY;
+    for (let n of nodes) {
         const dx = mouseX - n.displayX, dy = mouseY - n.displayY;
-        if (dx * dx + dy * dy < 400) {
+        if (dx * dx + dy * dy < 625) {
             if (userRole === 'admin') {
                 isDragging = true; draggedNode = n;
             }
@@ -495,44 +621,45 @@ function handleMouseUp() {
     isDragging = false; draggedNode = null;
 }
 
-// [New Functions for Rider/Courier Logic]
+// --- RIDER/COURIER LOGIC ---
 
 async function loadRidersAndAssignments() {
-    // Load Riders
     const res = await fetch(`${API_URL}/get_riders`);
     const riders = await res.json();
 
-    // Load Packages at Hub
     const res2 = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
     const allPkgs = await res2.json();
 
-    // UPDATED: Look for Status 3 (Arrived) OR 6 (At Hub) so they appear in the list
     const hubPkgs = allPkgs.filter(p => p.status === 3 || p.status === 6);
 
-    let html = `<div style="font-size:11px; margin-bottom:5px;">Waiting for Assignment: ${hubPkgs.length}</div>`;
+    let html = `<div style="font-size:12px; margin-bottom:12px; padding:10px; background:#f0f9ff; border-radius:8px; color:#0369a1; font-weight:600;">
+        📦 Waiting for Assignment: ${hubPkgs.length}
+    </div>`;
 
-    // Only show riders if we have them
     if (riders.length === 0) {
-        html += `<div style="padding:10px; color:#777; font-size:12px;">No Riders Found</div>`;
+        html += `<div style="padding:20px; color:#9ca3af; font-size:13px; text-align:center;">No Riders Available</div>`;
     }
 
     riders.forEach(r => {
         html += `
-            <div style="background:#f9f9f9; padding:8px; border-bottom:1px solid #ddd;">
-                <b>${r.username}</b> (${r.vehicle})
-                <button class="blue-btn" style="float:right; width:auto; padding:2px 8px;" 
-                   onclick="assignPackages(${r.id})">Assign</button>
+            <div style="background:#f9fafb; padding:12px; border-radius:10px; border:1px solid #e5e7eb; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700; color:#1f2937; margin-bottom:4px;">${r.username}</div>
+                        <div style="font-size:11px; color:#6b7280;">${r.vehicle === 'bike' ? '🚴 Bike' : '🚐 CarryBus'}</div>
+                    </div>
+                    <button class="btn-action" style="width:auto; padding:8px 16px; font-size:12px;" 
+                       onclick="assignPackages(${r.id})">Assign</button>
+                </div>
             </div>`;
     });
     document.getElementById('courier-list').innerHTML = html;
 }
 
 async function assignPackages(riderId) {
-    // 1. Find the packages that need assignment (Status 3 or 6)
     const resPkgs = await fetch(`${API_URL}/manager_packages?city=${userCity}`);
     const allPkgs = await resPkgs.json();
 
-    // Filter for packages that are 'Arrived' (3) or 'At Hub' (6)
     const packagesToAssign = allPkgs.filter(p => p.status === 3 || p.status === 6);
 
     if (packagesToAssign.length === 0) {
@@ -540,25 +667,20 @@ async function assignPackages(riderId) {
         return;
     }
 
-    // 2. Get the list of IDs (e.g., [101, 102])
     const packageIds = packagesToAssign.map(p => p.id);
 
-    console.log(`Assigning packages ${packageIds.join(',')} to Rider ${riderId}`);
-
-    // 3. Send Rider ID AND Package IDs to the backend
     const res = await fetch(`${API_URL}/assign_packages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             riderId: riderId,
-            packageIds: packageIds // sending the specific list
+            packageIds: packageIds
         })
     });
 
     const data = await res.json();
     alert(data.message);
 
-    // 4. Refresh the view
     loadRidersAndAssignments();
 }
 
@@ -567,10 +689,6 @@ async function riderAction(id, action) {
     loadRiderPackages();
 }
 
-
-// --- MISSING FUNCTIONS & FIXES ---
-
-// 1. Switch between Package View and Courier View (Fixing ID mismatch)
 function switchModule(mod) {
     if (mod === 'pkg') {
         document.getElementById('manager-tools').style.display = 'block';
@@ -583,7 +701,6 @@ function switchModule(mod) {
     }
 }
 
-// 2. Create a new Rider (Connects to /api/add_rider)
 async function createRider() {
     const u = document.getElementById('rider-user').value;
     const p = document.getElementById('rider-pass').value;
@@ -606,38 +723,38 @@ async function createRider() {
     }
 }
 
-// 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
 async function loadRiderPackages() {
     const res = await fetch(`${API_URL}/rider_packages`);
     const pkgs = await res.json();
     const list = document.getElementById('rider-pkg-list');
 
     if (pkgs.length === 0) {
-        list.innerHTML = "<div style='padding:10px; color:#777;'>No active deliveries</div>";
+        list.innerHTML = "<div style='padding:20px; color:#9ca3af; text-align:center; font-size:13px;'>No active deliveries</div>";
         return;
     }
 
     list.innerHTML = pkgs.map(p => {
-        // Warning for previous failed attempts
         const attemptWarn = p.attempts > 0
-            ? `<span style="color:#c0392b; font-size:11px; margin-left:5px;">(Attempt ${p.attempts + 1}/3)</span>`
+            ? `<span style="color:#ef4444; font-size:11px; font-weight:600; margin-left:8px;">⚠ Attempt ${p.attempts + 1}/3</span>`
             : '';
 
         return `
-        <div class="pkg-item" style="border-left: 4px solid #3498db;" onclick="startTracking(${p.id})">
-            <div style="font-size:14px; font-weight:bold;">
-                #${p.id} - ${p.receiver} 
-                ${attemptWarn}
+        <div class="pkg-item" style="border-left: 4px solid #3b82f6; background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);" onclick="startTracking(${p.id})">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="font-size:14px; font-weight:700; color:#1f2937;">
+                    #${p.id} ${attemptWarn}
+                </div>
             </div>
-            <div style="font-size:12px; margin-bottom:5px;">📍 ${p.address}</div>
+            <div style="font-size:13px; margin-bottom:4px; color:#475569;">👤 ${p.receiver}</div>
+            <div style="font-size:12px; margin-bottom:12px; color:#64748b;">📍 ${p.address}</div>
             
-            <div style="display:flex; gap:5px;">
+            <div style="display:flex; gap:8px;">
                 <button onclick="event.stopPropagation(); riderAction(${p.id}, 'delivered')" 
-                    style="background:#27ae60; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
+                    style="flex:1; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color:white; padding:8px; border:none; border-radius:8px; cursor:pointer; font-weight:600; font-size:12px;">
                     ✅ Delivered
                 </button>
                 <button onclick="event.stopPropagation(); riderAction(${p.id}, 'failed')" 
-                    style="background:#c0392b; color:white; padding:4px 8px; border:none; border-radius:3px; cursor:pointer;">
+                    style="flex:1; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color:white; padding:8px; border:none; border-radius:8px; cursor:pointer; font-weight:600; font-size:12px;">
                     ❌ Failed
                 </button>
             </div>
@@ -645,19 +762,18 @@ async function loadRiderPackages() {
     `}).join('');
 }
 
-// Helper to inject toggle buttons for Manager
 function addManagerToggles() {
     const container = document.getElementById('sidebar-container');
     const toggleDiv = document.createElement('div');
     toggleDiv.id = "mgr-toggle-container";
     toggleDiv.className = "card";
-    toggleDiv.style.background = "#ecf0f1";
+    toggleDiv.style.background = "linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)";
+    toggleDiv.style.borderColor = "#3b82f6";
     toggleDiv.innerHTML = `
-        <div style="display:flex; gap:5px;">
-            <button onclick="switchModule('pkg')" style="flex:1; padding:8px; cursor:pointer;">📦 Packages</button>
-            <button onclick="switchModule('courier')" style="flex:1; padding:8px; cursor:pointer;">🛵 Riders</button>
+        <div style="display:flex; gap:8px;">
+            <button onclick="switchModule('pkg')" style="flex:1; padding:10px; cursor:pointer; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color:white; border:none; border-radius:10px; font-weight:600; font-size:13px;">📦 Packages</button>
+            <button onclick="switchModule('courier')" style="flex:1; padding:10px; cursor:pointer; background:white; color:#6b7280; border:2px solid #e5e7eb; border-radius:10px; font-weight:600; font-size:13px;">🛵 Riders</button>
         </div>
     `;
-    // Insert at the top of the sidebar
     container.insertBefore(toggleDiv, container.firstChild);
 }
