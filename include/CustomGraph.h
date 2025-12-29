@@ -57,7 +57,6 @@ public:
     }
 
     // Completely non-physics refresh
-    // Completely non-physics refresh
     void refreshGraph()
     {
         nodes.clear();
@@ -104,8 +103,6 @@ public:
                 adjList[v].push_back({u, r.distance, r.isBlocked});
             }
         }
-
-        // No physics optimization called here. Nodes are static.
     }
 
     // Save current positions (X,Y) to the Database Cache
@@ -135,7 +132,7 @@ public:
         }
     }
 
-    // --- Pathfinding & Helpers (Unchanged) ---
+    // --- Pathfinding & Helpers (Unchanged) --- Dijkistra Algorithm ---
 
     pair<int, vector<string>> getShortestPath(string startCity, string endCity)
     {
@@ -193,8 +190,9 @@ public:
         }
         return "";
     }
-
+    // Returning the nodes.
     const vector<Node> &getNodes() const { return nodes; }
+    // returning the map with the edges.
     const map<int, vector<Edge>> &getAdjList() const { return adjList; }
 };
 
