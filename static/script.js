@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8080/api"; // Crow API url
+const API_URL = "http://localhost:8080/api";
 
 // --- GLOBAL STATE ---
 let canvas, ctx;
@@ -117,6 +117,9 @@ async function startTracking(id) {
 
     // Populate Tracking Pane logic... (Keep existing code)
     document.getElementById('trk-id').innerText = data.id;
+    document.getElementById('trk-to').innerText = data.sender;
+    document.getElementById('trk-from').innerText = data.receiver;
+    document.getElementById('trk-address').innerText = data.address;
     document.getElementById('trk-status').innerText = getStatusName(data.status);
     document.getElementById('trk-status').className = `status-badge st-${data.status}`;
 
@@ -383,9 +386,9 @@ async function createPackage() {
     if (!weight || !sender) { alert("Please fill details"); return; }
 
     // --- CLIENT SIDE PRICE ESTIMATION ---
-    let base = 10;
-    let weightCost = weight * 2;
-    let priorityCost = (type === 1) ? 50 : (type === 2 ? 20 : 0);
+    let base = 5;
+    let weightCost = weight * 1.1;
+    let priorityCost = (type === 1) ? 20 : (type === 2 ? 5 : 0);
     let estimatedPrice = base + weightCost + priorityCost;
 
     // --- CONFIRMATION MODAL ---
@@ -405,19 +408,92 @@ async function createPackage() {
     loadManagerPackages();
 }
 
-async function updatePkg(id, action) { await fetch(`${API_URL}/update_pkg_status`, { method: 'POST', body: JSON.stringify({ id, action }) }); loadManagerPackages(); }
-async function addCity() { await fetch(`${API_URL}/add_city`, { method: 'POST', body: JSON.stringify({ name: document.getElementById('new-city-name').value, password: document.getElementById('new-city-pass').value }) }); loadMap(); }
-async function addRoute() { await fetch(`${API_URL}/add_route`, { method: 'POST', body: JSON.stringify({ key: document.getElementById('route-key').value, distance: parseInt(document.getElementById('route-dist').value) }) }); loadMap(); }
-async function toggleBlock(key, b) { await fetch(`${API_URL}/toggle_block`, { method: 'POST', body: JSON.stringify({ key, block: b }) }); loadMap(); }
-async function nextShift() { const res = await fetch(`${API_URL}/next_shift`, { method: 'POST' }); const data = await res.json(); if (data.logs) alert(data.logs.join('\n')); }
+async function updatePkg(id, action) {
+    await fetch(`${API_URL}/update_pkg_status`,
+        { method: 'POST', body: JSON.stringify({ id, action }) });
+    loadManagerPackages();
+}
 
-function renderRouteManager() { const list = document.getElementById('route-list'); list.innerHTML = ""; edges.forEach(e => { const n1 = nodes.find(n => n.id === e.source), n2 = nodes.find(n => n.id === e.target); if (n1 && n2) list.innerHTML += `<div>${n1.name}-${n2.name} <button onclick="toggleBlock('${n1.name}-${n2.name}',${!e.blocked})">${e.blocked ? 'Unblock' : 'Block'}</button></div>`; }); }
-function getStatusName(s) { const names = ["Created", "Loaded", "In Transit", "Arrived", "Delivered", "Failed"]; return names[s] || "?"; }
-function showTab(name) { document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`tab-${name}`).classList.add('active'); }
+async function addCity() {
+    await fetch(`${API_URL}/add_city`,
+        {
+            method: 'POST', body: JSON.stringify(
+                { name: document.getElementById('new-city-name').value, password: document.getElementById('new-city-pass').value })
+        });
+    loadMap();
+}
 
-async function handleMouseDown(e) { const mouseX = e.offsetX, mouseY = e.offsetY; for (let n of nodes) { const dx = mouseX - n.displayX, dy = mouseY - n.displayY; if (dx * dx + dy * dy < 400) { if (userRole === 'admin') { isDragging = true; draggedNode = n; } } } }
-function handleMouseMove(e) { if (!isDragging || !draggedNode || userRole !== 'admin') return; draggedNode.displayX = e.offsetX; draggedNode.displayY = e.offsetY; draggedNode.x = (draggedNode.displayX - transform.offsetX) / transform.scale + transform.minX; draggedNode.y = (draggedNode.displayY - transform.offsetY) / transform.scale + transform.minY; drawMap(); }
-function handleMouseUp() { if (isDragging && draggedNode && userRole === 'admin') { fetch(`${API_URL}/update_node`, { method: 'POST', body: JSON.stringify({ name: draggedNode.name, x: draggedNode.x, y: draggedNode.y }) }); } isDragging = false; draggedNode = null; }
+async function addRoute() {
+    await fetch(`${API_URL}/add_route`, {
+        method: 'POST', body: JSON.stringify(
+            { key: document.getElementById('route-key').value, distance: parseInt(document.getElementById('route-dist').value) })
+    });
+    loadMap();
+}
+
+async function toggleBlock(key, b) {
+    await fetch(`${API_URL}/toggle_block`, {
+        method: 'POST', body: JSON.stringify({ key, block: b })
+    });
+    loadMap();
+}
+async function nextShift() {
+    const res = await fetch(`${API_URL}/next_shift`, {
+        method: 'POST'
+    });
+    const data = await res.json();
+    if (data.logs) alert(data.logs.join('\n'));
+}
+
+function renderRouteManager() {
+    const list = document.getElementById('route-list');
+    list.innerHTML = "";
+    edges.forEach(e => {
+        const n1 = nodes.find(n => n.id === e.source), n2 = nodes.find(n => n.id === e.target);
+        if (n1 && n2) list.innerHTML += `<div>${n1.name}-${n2.name} 
+        <button onclick="toggleBlock('${n1.name}-${n2.name}',${!e.blocked})">${e.blocked ? 'Unblock' : 'Block'}</button></div>`;
+    });
+}
+function getStatusName(s) {
+    const names = ["Created", "Loaded", "In Transit", "Arrived", "Delivered", "Failed"];
+    return names[s] || "?";
+}
+
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+async function handleMouseDown(e) {
+    const mouseX = e.offsetX, mouseY = e.offsetY; for (let n of nodes) {
+        const dx = mouseX - n.displayX, dy = mouseY - n.displayY;
+        if (dx * dx + dy * dy < 400) {
+            if (userRole === 'admin') {
+                isDragging = true; draggedNode = n;
+            }
+        }
+    }
+}
+
+function handleMouseMove(e) {
+    if (!isDragging || !draggedNode || userRole !== 'admin') return;
+    draggedNode.displayX = e.offsetX;
+    draggedNode.displayY = e.offsetY;
+    draggedNode.x = (draggedNode.displayX - transform.offsetX) / transform.scale + transform.minX;
+    draggedNode.y = (draggedNode.displayY - transform.offsetY) / transform.scale + transform.minY;
+    drawMap();
+}
+
+function handleMouseUp() {
+    if (isDragging && draggedNode && userRole === 'admin') {
+        fetch(`${API_URL}/update_node`, {
+            method: 'POST', body: JSON.stringify(
+                { name: draggedNode.name, x: draggedNode.x, y: draggedNode.y })
+        });
+    }
+    isDragging = false; draggedNode = null;
+}
 
 // [New Functions for Rider/Courier Logic]
 
@@ -530,7 +606,6 @@ async function createRider() {
     }
 }
 
-// 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
 // 3. Load Packages for the logged-in Rider (Connects to /api/rider_packages)
 async function loadRiderPackages() {
     const res = await fetch(`${API_URL}/rider_packages`);

@@ -38,10 +38,13 @@ int main()
     // --- STATIC FILE SERVING ---
     CROW_ROUTE(app, "/")([](const crow::request &, crow::response &res)
                          {
-        res.set_static_file_info("static/index.html"); res.end(); });
+        res.set_static_file_info("static/index.html"); 
+        res.end(); });
+
     CROW_ROUTE(app, "/<string>")([](const crow::request &, crow::response &res, string filename)
                                  {
-        res.set_static_file_info("static/" + filename); res.end(); });
+        res.set_static_file_info("static/" + filename); 
+        res.end(); });
 
     // --- AUTH ---
     CROW_ROUTE(app, "/api/login").methods(crow::HTTPMethod::Post)([&](const crow::request &req)
@@ -94,6 +97,8 @@ int main()
         if(p.id != -1) {
             res["found"] = true;
             res["id"] = p.id;
+            res["reciever"] = p.receiver;
+            res["address"] = p.address;
             res["sender"] = p.sender; res["receiver"] = p.receiver;
             res["source"] = p.sourceCity; res["dest"] = p.destCity;
             res["current"] = p.currentCity;
@@ -150,7 +155,7 @@ int main()
 
     // 5. Update Status (Load/Deliver/Return)
     CROW_ROUTE(app, "/api/update_pkg_status").methods(crow::HTTPMethod::Post)([&](const crow::request &req)
-    {
+                                                                              {
         auto x = crow::json::load(req.body);
         int status = 0;
         string action = x["action"].s();
@@ -159,8 +164,7 @@ int main()
         else if (action == "return") status = 8;  // UPDATED: 8 = RETURNED
         
         appCore.updatePkgStatusSimple(x["id"].i(), status);
-        return crow::response(200); 
-    });
+        return crow::response(200); });
 
     // --- SIMULATION ---
     CROW_ROUTE(app, "/api/next_shift").methods(crow::HTTPMethod::Post)([&]()
@@ -317,7 +321,6 @@ int main()
         res["failed"] = stats.failed;
         
         return crow::response(res); });
-    
 
     app.port(8080).multithreaded().run();
 }

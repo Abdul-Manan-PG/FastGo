@@ -1,174 +1,237 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastGo Logistics</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>FastGo Logistics</title>
+        <link rel="stylesheet" href="style.css">
+        <style>
         /* Small styling for close button */
         #close-tracking-btn { background: #e74c3c; margin-top: 10px; display: none; }
     </style>
-</head>
-<body>
-    <div id="login-screen" class="screen active">
-        <div class="login-box">
-            <h1>FastGo Login</h1>
-            <input type="text" id="username" placeholder="Username (City Name)">
-            <input type="password" id="password" placeholder="Password">
-            <button onclick="login()">Login</button>
-            <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-                <p style="font-size: 12px; color: #777; margin-bottom: 5px;">Tracking a package?</p>
-                <button onclick="loginAsGuest()" style="background:#27ae60;">👤 Login as Guest</button>
+    </head>
+    <body>
+        <div id="login-screen" class="screen active">
+            <div class="login-box">
+                <h1>FastGo Login</h1>
+                <input type="text" id="username"
+                    placeholder="Username (City Name)">
+                <input type="password" id="password" placeholder="Password">
+                <button onclick="login()">Login</button>
+                <div
+                    style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+                    <p
+                        style="font-size: 12px; color: #777; margin-bottom: 5px;">Tracking
+                        a package?</p>
+                    <button onclick="loginAsGuest()"
+                        style="background:#27ae60;">👤 Login as Guest</button>
+                </div>
+                <p id="login-msg" class="error"></p>
             </div>
-            <p id="login-msg" class="error"></p>
         </div>
-    </div>
 
-    <div id="dashboard-screen" class="screen">
-        <nav>
-            <h2>FastGo <span id="role-display"></span> <span id="city-display"></span></h2>
-            <div id="admin-controls" style="display:none;">
-                <button onclick="nextShift()" style="background:#f1c40f; color:#333;">⏩ NEXT SHIFT</button>
-            </div>
-            <button onclick="logout()" class="logout-btn">Logout</button>
-        </nav>
-
-        <div class="container">
-            <div class="sidebar" id="sidebar-container">
-                
-                <div id="rider-tools" style="display:none;">
-                    <div class="card">
-                        <h4>🛵 My Deliveries</h4>
-                        <button onclick="loadRiderPackages()" class="blue-btn">Refresh</button>
-                        <div id="rider-pkg-list" class="route-list-container"></div>
-                    </div>
+        <div id="dashboard-screen" class="screen">
+            <nav>
+                <h2>FastGo <span id="role-display"></span> <span
+                        id="city-display"></span></h2>
+                <div id="admin-controls" style="display:none;">
+                    <button onclick="nextShift()"
+                        style="background:#f1c40f; color:#333;">⏩ NEXT
+                        SHIFT</button>
                 </div>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </nav>
 
-                <div id="manager-courier-module" style="display:none;">
-                     <div class="card">
-                        <h4>👤 Create Rider</h4>
-                        <input type="text" id="rider-user" placeholder="Username">
-                        <input type="text" id="rider-pass" placeholder="Password">
-                        <select id="rider-veh">
-                            <option value="bike">Bike (Max 10, < 2kg)</option>
-                            <option value="bus">CarryBus (Max 90kg)</option>
-                        </select>
-                        <button onclick="createRider()" class="blue-btn">Add Rider</button>
-                    </div>
-                    <div class="card">
-                        <h4>📋 Assignment (At Hub)</h4>
-                        <div id="courier-list" class="route-list-container"></div>
-                    </div>
-                </div>
+            <div class="container">
+                <div class="sidebar" id="sidebar-container">
 
-                <div id="pkg-tracking-pane" class="card" style="display:none; border:2px solid #3498db;">
-                    <h4>📦 Tracking Info</h4>
-                    <p><b>ID:</b> #<span id="trk-id"></span></p>
-                    <p><b>Status:</b> <span id="trk-status" class="status-badge"></span></p>
-                    
-                    <div style="display:flex; gap:5px; margin: 10px 0;">
-                        <button onclick="trackPrev()" style="background:#f39c12;">⬅ Previous</button>
-                        <button onclick="trackNext()" style="background:#27ae60;">Next ➡</button>
-                    </div>
-
-                    <p><b>Current View:</b> <span id="trk-current" style="color:#e67e22; font-weight:bold;"></span></p>
-                    
-                    <h4>History (Green)</h4>
-                    <div id="trk-history-list" style="font-size:11px; max-height:100px; overflow-y:auto; margin-bottom:10px;"></div>
-                    
-                    <h4>Future Route (Blue)</h4>
-                    <div id="trk-future-list" style="font-size:11px; color:#555;"></div>
-
-                    <button id="close-tracking-btn" onclick="closeTracking()">❌ Close Tracking</button>
-                </div>
-
-                <div id="guest-tools" style="display:none;">
-                    <div class="card">
-                        <h4>📦 Track Package</h4>
-                        <input type="number" id="guest-track-id" placeholder="Enter Tracking ID">
-                        <button onclick="trackPackageByID()" class="blue-btn">Search</button>
-                    </div>
-                </div>
-
-                <div id="admin-tools" style="display:none;">
-                    <div class="card" style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color:white;">
-                        <h4>📊 System Dashboard</h4>
-                        <div style="display:flex; justify-content: space-around; text-align:center; margin-top:10px;">
-                            <div>
-                                <div style="font-size:20px; font-weight:bold; color:#2ecc71;" id="stat-revenue">$0</div>
-                                <div style="font-size:11px; opacity:0.8;">Revenue</div>
-                            </div>
-                            <div>
-                                <div style="font-size:20px; font-weight:bold;" id="stat-delivered">0</div>
-                                <div style="font-size:11px; opacity:0.8;">Delivered</div>
-                            </div>
-                            <div>
-                                <div style="font-size:20px; font-weight:bold; color:#3498db;" id="stat-transit">0</div>
-                                <div style="font-size:11px; opacity:0.8;">In Transit</div>
-                            </div>
-                            <div>
-                                <div style="font-size:20px; font-weight:bold; color:#e74c3c;" id="stat-failed">0</div>
-                                <div style="font-size:11px; opacity:0.8;">Failed</div>
-                            </div>
+                    <div id="rider-tools" style="display:none;">
+                        <div class="card">
+                            <h4>🛵 My Deliveries</h4>
+                            <button onclick="loadRiderPackages()"
+                                class="blue-btn">Refresh</button>
+                            <div id="rider-pkg-list"
+                                class="route-list-container"></div>
                         </div>
                     </div>
 
-                    <div class="card">
-                        <button class="tab-btn active" onclick="loadAdminPackages()">All Packages</button>
-                        <div id="admin-pkg-list" class="tab-content active" style="max-height:200px;"></div>
-                    </div>
-                    <div class="card">
-                        <h4>📍 City Management</h4>
-                        <input type="text" id="new-city-name" placeholder="City Name">
-                        <input type="text" id="new-city-pass" placeholder="Password">
-                        <button onclick="addCity()" class="blue-btn">Add City</button>
-                    </div>
-                    <div class="card">
-                        <h4>🛣️ Add Route</h4>
-                        <input type="text" id="route-key" placeholder="Key (e.g. A-B)">
-                        <input type="number" id="route-dist" placeholder="Distance">
-                        <button onclick="addRoute()" class="blue-btn">Connect Route</button>
-                    </div>
-                    <div class="card">
-                        <h4>🚦 Route Manager</h4>
-                        <div id="route-list" class="route-list-container"></div>
-                    </div>
-                </div>
-
-                <div id="manager-tools" style="display:none;">
-                    <div class="card">
-                        <h4>📦 New Package</h4>
-                        <input type="text" id="pkg-sender" placeholder="Sender">
-                        <input type="text" id="pkg-receiver" placeholder="Receiver">
-                        <input type="text" id="pkg-addr" placeholder="Address">
-                        <input type="text" id="pkg-dest" placeholder="Dest City">
-                        <select id="pkg-type">
-                            <option value="1">Overnight</option>
-                            <option value="2">2-Day</option>
-                            <option value="3">Normal</option>
-                        </select>
-                        <input type="number" id="pkg-weight" placeholder="Weight">
-                        <button onclick="createPackage()" class="blue-btn">Create</button>
-                    </div>
-                    <div class="card">
-                        <div style="display:flex; gap:5px; margin-bottom:5px;">
-                            <button class="tab-btn active" onclick="showTab('outgoing')">Out</button>
-                            <button class="tab-btn" onclick="showTab('incoming')">In</button>
-                            <button class="tab-btn" onclick="showTab('history')">Hist</button>
+                    <div id="manager-courier-module" style="display:none;">
+                        <div class="card">
+                            <h4>👤 Create Rider</h4>
+                            <input type="text" id="rider-user"
+                                placeholder="Username">
+                            <input type="text" id="rider-pass"
+                                placeholder="Password">
+                            <select id="rider-veh">
+                                <option value="bike">Bike (Max 10, <
+                                    2kg)</option>
+                                <option value="bus">CarryBus (Max 90kg)</option>
+                            </select>
+                            <button onclick="createRider()" class="blue-btn">Add
+                                Rider</button>
                         </div>
-                        <div id="tab-outgoing" class="tab-content active"></div>
-                        <div id="tab-incoming" class="tab-content"></div>
-                        <div id="tab-history" class="tab-content"></div>
+                        <div class="card">
+                            <h4>📋 Assignment (At Hub)</h4>
+                            <div id="courier-list"
+                                class="route-list-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="pkg-tracking-pane" class="card"
+                        style="display:none; border:2px solid #3498db;">
+                        <h4>📦 Tracking Info</h4>
+                        <p><b>ID:</b> #<span id="trk-id"></span></p>
+                        <p><b>From:</b> <span id="trk-from"></span></p>
+                        <p><b>To:</b> <span id="trk-to"></span></p>
+                        <p><b>Address:</b> <span id="trk-address"></span></p>
+                        <p><b>Status:</b> <span id="trk-status"
+                                class="status-badge"></span></p>
+
+                        <div style="display:flex; gap:5px; margin: 10px 0;">
+                            <button onclick="trackPrev()"
+                                style="background:#f39c12;">⬅ Previous</button>
+                            <button onclick="trackNext()"
+                                style="background:#27ae60;">Next ➡</button>
+                        </div>
+
+                        <p><b>Current View:</b> <span id="trk-current"
+                                style="color:#e67e22; font-weight:bold;"></span></p>
+
+                        <h4>History (Green)</h4>
+                        <div id="trk-history-list"
+                            style="font-size:11px; max-height:100px; overflow-y:auto; margin-bottom:10px;"></div>
+
+                        <h4>Future Route (Blue)</h4>
+                        <div id="trk-future-list"
+                            style="font-size:11px; color:#555;"></div>
+
+                        <button id="close-tracking-btn"
+                            onclick="closeTracking()">❌ Close Tracking</button>
+                    </div>
+
+                    <div id="guest-tools" style="display:none;">
+                        <div class="card">
+                            <h4>📦 Track Package</h4>
+                            <input type="number" id="guest-track-id"
+                                placeholder="Enter Tracking ID">
+                            <button onclick="trackPackageByID()"
+                                class="blue-btn">Search</button>
+                        </div>
+                    </div>
+
+                    <div id="admin-tools" style="display:none;">
+                        <div class="card"
+                            style="background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); color:white;">
+                            <h4>📊 System Dashboard</h4>
+                            <div
+                                style="display:flex; justify-content: space-around; text-align:center; margin-top:10px;">
+                                <div>
+                                    <div
+                                        style="font-size:20px; font-weight:bold; color:#2ecc71;"
+                                        id="stat-revenue">$0</div>
+                                    <div
+                                        style="font-size:11px; opacity:0.8;">Revenue</div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="font-size:20px; font-weight:bold;"
+                                        id="stat-delivered">0</div>
+                                    <div
+                                        style="font-size:11px; opacity:0.8;">Delivered</div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="font-size:20px; font-weight:bold; color:#3498db;"
+                                        id="stat-transit">0</div>
+                                    <div style="font-size:11px; opacity:0.8;">In
+                                        Transit</div>
+                                </div>
+                                <div>
+                                    <div
+                                        style="font-size:20px; font-weight:bold; color:#e74c3c;"
+                                        id="stat-failed">0</div>
+                                    <div
+                                        style="font-size:11px; opacity:0.8;">Failed</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <button class="tab-btn active"
+                                onclick="loadAdminPackages()">All
+                                Packages</button>
+                            <div id="admin-pkg-list" class="tab-content active"
+                                style="max-height:200px;"></div>
+                        </div>
+                        <div class="card">
+                            <h4>📍 City Management</h4>
+                            <input type="text" id="new-city-name"
+                                placeholder="City Name">
+                            <input type="text" id="new-city-pass"
+                                placeholder="Password">
+                            <button onclick="addCity()" class="blue-btn">Add
+                                City</button>
+                        </div>
+                        <div class="card">
+                            <h4>🛣️ Add Route</h4>
+                            <input type="text" id="route-key"
+                                placeholder="Key (e.g. A-B)">
+                            <input type="number" id="route-dist"
+                                placeholder="Distance">
+                            <button onclick="addRoute()"
+                                class="blue-btn">Connect Route</button>
+                        </div>
+                        <div class="card">
+                            <h4>🚦 Route Manager</h4>
+                            <div id="route-list"
+                                class="route-list-container"></div>
+                        </div>
+                    </div>
+
+                    <div id="manager-tools" style="display:none;">
+                        <div class="card">
+                            <h4>📦 New Package</h4>
+                            <input type="text" id="pkg-sender"
+                                placeholder="Sender">
+                            <input type="text" id="pkg-receiver"
+                                placeholder="Receiver">
+                            <input type="text" id="pkg-addr"
+                                placeholder="Address">
+                            <input type="text" id="pkg-dest"
+                                placeholder="Dest City">
+                            <select id="pkg-type">
+                                <option value="1">Overnight</option>
+                                <option value="2">2-Day</option>
+                                <option value="3">Normal</option>
+                            </select>
+                            <input type="number" id="pkg-weight"
+                                placeholder="Weight">
+                            <button onclick="createPackage()"
+                                class="blue-btn">Create</button>
+                        </div>
+                        <div class="card">
+                            <div
+                                style="display:flex; gap:5px; margin-bottom:5px;">
+                                <button class="tab-btn active"
+                                    onclick="showTab('outgoing')">Out</button>
+                                <button class="tab-btn"
+                                    onclick="showTab('incoming')">In</button>
+                                <button class="tab-btn"
+                                    onclick="showTab('history')">Hist</button>
+                            </div>
+                            <div id="tab-outgoing"
+                                class="tab-content active"></div>
+                            <div id="tab-incoming" class="tab-content"></div>
+                            <div id="tab-history" class="tab-content"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="map-container">
-                <canvas id="mapCanvas"></canvas>
+                <div class="map-container">
+                    <canvas id="mapCanvas"></canvas>
+                </div>
             </div>
         </div>
-    </div>
-    <script src="script.js"></script>
-</body>
+        <script src="script.js"></script>
+    </body>
 </html>

@@ -40,11 +40,12 @@ private:
     // --- Helper: Get Current Time as String ---
     string getCurrentTime()
     {
-        time_t now = time(0);
-        tm *ltm = localtime(&now);
+        time_t now = time(nullptr);
+        tm ltm;
+        localtime_s(&ltm, &now);
+
         char buffer[80];
-        // Format: YYYY-MM-DD HH:MM:SS
-        strftime(buffer, 80, "%Y-%m-%d %H:%M:%S", ltm);
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &ltm);
         return string(buffer);
     }
 
@@ -139,9 +140,11 @@ public:
         double basePrice = 10.0;
         double weightCost = weight * 2.0;
         double priorityCost = 0.0;
-        
-        if (type == OVERNIGHT) priorityCost = 50.0;
-        else if (type == TWODAY) priorityCost = 20.0;
+
+        if (type == OVERNIGHT)
+            priorityCost = 50.0;
+        else if (type == TWODAY)
+            priorityCost = 20.0;
         // Normal = 0
 
         p.price = basePrice + weightCost + priorityCost;
@@ -150,8 +153,10 @@ public:
         p.historyStr = currentUserCity + "|" + getCurrentTime();
 
         auto res = graph.getShortestPath(currentUserCity, dest);
-        if (res.first != -1) p.routeStr = vecToString(res.second);
-        else p.routeStr = "";
+        if (res.first != -1)
+            p.routeStr = vecToString(res.second);
+        else
+            p.routeStr = "";
 
         pkgDB.addPackage(p);
     }
@@ -163,38 +168,47 @@ public:
         if (p.id != -1)
         {
             // If returning, update status to RETURNED (8) and add history
-            if(status == RETURNED) {
-                 string newHist = p.historyStr + ",RETURNED TO SENDER|" + getCurrentTime();
-                 pkgDB.updateStatusAndRoute(id, RETURNED, p.currentCity, newHist, "");
-            } else {
-                 pkgDB.updateStatusAndRoute(id, status, p.currentCity, p.historyStr, p.routeStr);
+            if (status == RETURNED)
+            {
+                string newHist = p.historyStr + ",RETURNED TO SENDER|" + getCurrentTime();
+                pkgDB.updateStatusAndRoute(id, RETURNED, p.currentCity, newHist, "");
+            }
+            else
+            {
+                pkgDB.updateStatusAndRoute(id, status, p.currentCity, p.historyStr, p.routeStr);
             }
         }
     }
 
     // --- NEW: ADMIN STATS HELPER ---
-    struct AdminStats {
+    struct AdminStats
+    {
         double revenue;
         int delivered;
         int inTransit;
         int failed;
     };
 
-    AdminStats getSystemStats() {
+    AdminStats getSystemStats()
+    {
         vector<Package> all = pkgDB.getAllPackages();
         AdminStats stats = {0.0, 0, 0, 0};
 
-        for(const auto& p : all) {
+        for (const auto &p : all)
+        {
             // Sum Revenue (Price) for valid packages (exclude cancelled if any, or just sum all created)
             stats.revenue += p.price;
 
-            if(p.status == DELIVERED) stats.delivered++;
-            else if(p.status == IN_TRANSIT || p.status == OUT_FOR_DELIVERY) stats.inTransit++;
-            else if(p.status == FAILED || p.status == RETURNED) stats.failed++;
+            if (p.status == DELIVERED)
+                stats.delivered++;
+            else if (p.status == IN_TRANSIT || p.status == OUT_FOR_DELIVERY)
+                stats.inTransit++;
+            else if (p.status == FAILED || p.status == RETURNED)
+                stats.failed++;
         }
         return stats;
     }
-    
+
     // --- THE CORE SIMULATION LOOP ---
     // Moves packages, updates history, and recalculates future routes
     vector<string> runTimeStep(Graph &graph)
@@ -420,7 +434,7 @@ public:
 
         if (action == "delivered")
         {
-            // FIX: Use ',' to start a NEW history entry. 
+            // FIX: Use ',' to start a NEW history entry.
             // Was: p.historyStr + "|DELIVERED..." which merged it into the previous city.
             string newHist = p.historyStr + ",DELIVERED|" + getCurrentTime();
             pkgDB.updateStatusAndRoute(pkgId, DELIVERED, p.currentCity, newHist, "");
@@ -438,7 +452,7 @@ public:
             }
             else
             {
-                // Note: We don't necessarily add history for a retry, 
+                // Note: We don't necessarily add history for a retry,
                 // but you could add ",Attempt Failed|" if you wanted.
                 pkgDB.updateAttempts(pkgId, attempts, OUT_FOR_DELIVERY); // Keep trying
                 return "Attempt Recorded";

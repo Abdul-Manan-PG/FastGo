@@ -141,8 +141,10 @@ nav {
 
 /* Package Items */
 .pkg-item {
-    border-bottom: 1px solid #eee;
-    padding: 8px 0;
+    border: 2px solid #2980b9;
+    border-radius: 8px;
+    padding: 8px 2px;
+    margin-bottom: 1px;
     font-size: 13px;
     display: flex;
     flex-direction: column;
@@ -173,13 +175,16 @@ nav {
 
 /* NEW: Waiting at Hub */
 .st-6 {
-    background: #8e44ad; /* Purple */
+    background: #8e44ad;
+    /* Purple */
 }
 
 /* NEW: Out for Delivery (Rider) */
 .st-7 {
-    background: #d35400; /* Dark Orange */
+    background: #d35400;
+    /* Dark Orange */
 }
+
 .st-0 {
     background: #95a5a6;
 }
@@ -229,6 +234,7 @@ button {
     border-radius: 4px;
     cursor: pointer;
     color: white;
+    background-color: #3498db;
     font-weight: 600;
     font-size: 13px;
     margin-top: 5px;
@@ -304,7 +310,8 @@ canvas {
     border: 1px solid #bdc3c7;
     transition: all 0.2s;
     font-weight: bold;
-    margin: 0; /* Override default button margin */
+    margin: 0;
+    /* Override default button margin */
 }
 
 #mgr-toggle-container button:hover {
