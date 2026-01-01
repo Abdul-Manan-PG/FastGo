@@ -41,11 +41,11 @@ private:
     string getCurrentTime()
     {
         time_t now = time(nullptr);
-        tm ltm;
-        localtime_s(&ltm, &now);
+        tm *ltm = localtime(&now);
 
-        char buffer[80];
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &ltm);
+        char buffer[25];
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ltm);
+
         return string(buffer);
     }
 
@@ -134,17 +134,19 @@ public:
         p.weight = weight;
         p.status = CREATED;
         p.ticks = 0;
+        p.riderId = 0;
+        p.attempts = 0;
 
         // --- NEW: Calculate Price ---
         // Formula: Base($10) + (Weight * $2) + Priority Surcharge
-        double basePrice = 10.0;
-        double weightCost = weight * 2.0;
+        double basePrice = 5.0;
+        double weightCost = weight * 1.2;
         double priorityCost = 0.0;
 
         if (type == OVERNIGHT)
-            priorityCost = 50.0;
-        else if (type == TWODAY)
             priorityCost = 20.0;
+        else if (type == TWODAY)
+            priorityCost = 10.0;
         // Normal = 0
 
         p.price = basePrice + weightCost + priorityCost;
@@ -171,7 +173,7 @@ public:
             if (status == RETURNED)
             {
                 string newHist = p.historyStr + ",RETURNED TO SENDER|" + getCurrentTime();
-                pkgDB.updateStatusAndRoute(id, RETURNED, p.currentCity, newHist, "");
+                pkgDB.updateStatusAndRoute(id, 8, p.currentCity, newHist, "");
             }
             else
             {

@@ -601,8 +601,19 @@ function renderRouteManager() {
 }
 
 function getStatusName(s) {
-    const names = ["Created", "Loaded", "In Transit", "Arrived", "Delivered", "Failed"];
-    return names[s] || "Assigned";
+    // Corrected Array to match C++ Enum
+    const names = [
+        "Created",          // 0
+        "Loaded",           // 1
+        "In Transit",       // 2
+        "Arrived",          // 3
+        "Delivered",        // 4
+        "Failed",           // 5
+        "At Hub",           // 6
+        "Out for Delivery", // 7
+        "Returned"          // 8
+    ];
+    return names[s] || "Unknown";
 }
 
 function showTab(name) {
