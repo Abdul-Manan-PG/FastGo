@@ -136,7 +136,6 @@ Defines the Package entity and manages its lifecycle state.
 
 * **University:** University of Engineering and Technology
 * **Course:** Data Structures and Algorithms (DSA)
-* **Instructor:** Mr. Ali Raza
 
 ---
 © 2026 Abdul-Manan-PG. All Rights Reserved.
