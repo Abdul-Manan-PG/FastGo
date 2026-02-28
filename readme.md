@@ -5,7 +5,7 @@
 ## 🚀 Overview
 **FastGo Logistics** is a full-stack courier management simulation engine designed to demonstrate the practical application of **Data Structures and Algorithms (DSA)** in real-world software engineering.
 
-Developed as a final semester project for the Data Structures and Algorithms course at **[University Name]** (Instructor: **[Instructor Name]**), this system replaces high-level abstractions with custom-engineered data structures. It features a high-performance **C++ backend** handling complex graph routing and simulation, paired with a dynamic **HTML5/JavaScript frontend** for real-time visualization.
+Developed as a final semester project for the Data Structures and Algorithms course at University of Engineering and Technology, this system replaces high-level abstractions with custom-engineered data structures. It features a high-performance **C++ backend** handling complex graph routing and simulation, paired with a dynamic **HTML5/JavaScript frontend** for real-time visualization.
 
 ---
 
